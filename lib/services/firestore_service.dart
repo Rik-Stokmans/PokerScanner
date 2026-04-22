@@ -542,6 +542,51 @@ class FirestoreService {
 
   static Future<void> removeFriend(String friendshipId) =>
       _db.collection('friendships').doc(friendshipId).delete();
+
+  // ─── Scanner-driven card assignment (host only) ───────────────────────────
+
+  /// Assign [card] to a specific player's hole hand.
+  ///
+  /// The card is appended to that player's current hand (up to 2 cards).
+  /// The host is responsible for calling this for each scanned hole card.
+  static Future<void> assignHoleCard(
+      String gameId, GameModel game, String targetPlayerId, CardModel card) async {
+    final hands = game.playerHands.map(
+      (uid, cards) => MapEntry(uid, List<CardModel>.from(cards)),
+    );
+    final hand = List<CardModel>.from(hands[targetPlayerId] ?? []);
+    if (hand.length >= 2) return; // already has 2 cards
+    if (hand.contains(card)) return; // duplicate guard
+    hand.add(card);
+    hands[targetPlayerId] = hand;
+
+    await _db.collection('games').doc(gameId).update({
+      'playerHands': hands.map(
+        (uid, cards) => MapEntry(uid, cards.map((c) => c.toMap()).toList()),
+      ),
+    });
+  }
+
+  /// Add [card] to the community cards on the board.
+  ///
+  /// Enforces the maximum community card count for the current round.
+  static Future<void> assignCommunityCard(
+      String gameId, GameModel game, CardModel card) async {
+    final maxCommunity = switch (game.currentRound) {
+      BettingRound.preflop => 0,
+      BettingRound.flop    => 3,
+      BettingRound.turn    => 4,
+      BettingRound.river   => 5,
+    };
+
+    if (game.communityCards.length >= maxCommunity) return;
+    if (game.communityCards.contains(card)) return;
+
+    final updated = [...game.communityCards, card];
+    await _db.collection('games').doc(gameId).update({
+      'communityCards': updated.map((c) => c.toMap()).toList(),
+    });
+  }
 }
 
 extension GameModelCopyWith on GameModel {

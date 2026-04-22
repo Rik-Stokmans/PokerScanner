@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/scanner_service.dart';
 import '../theme/app_colors.dart';
 
-class ScannerStatusBadge extends StatelessWidget {
-  final bool isActive;
+/// Displays the scanner online/offline state.
+///
+/// When [isActive] is provided explicitly it overrides the provider value
+/// (useful for screens where no scanner is associated yet).
+class ScannerStatusBadge extends ConsumerWidget {
+  /// Explicit override; when null the provider value is used.
+  final bool? isActive;
 
-  const ScannerStatusBadge({super.key, this.isActive = false});
+  const ScannerStatusBadge({super.key, this.isActive});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool scannerOnline = isActive ??
+        ref.watch(scannerServiceProvider.select((s) => s.isOnline));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -21,9 +30,11 @@ class ScannerStatusBadge extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: isActive ? AppColors.primary : AppColors.onSurfaceVariant,
+              color: scannerOnline
+                  ? AppColors.primary
+                  : AppColors.onSurfaceVariant,
               shape: BoxShape.circle,
-              boxShadow: isActive
+              boxShadow: scannerOnline
                   ? [
                       BoxShadow(
                         color: AppColors.surfaceTint.withOpacity(0.4),
@@ -36,11 +47,13 @@ class ScannerStatusBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            isActive ? 'Scanner Active' : 'Scanner Offline',
+            scannerOnline ? 'Scanner Active' : 'Scanner Offline',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: isActive ? AppColors.primary : AppColors.onSurfaceVariant,
+              color: scannerOnline
+                  ? AppColors.primary
+                  : AppColors.onSurfaceVariant,
               letterSpacing: 0.5,
             ),
           ),

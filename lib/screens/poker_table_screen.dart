@@ -9,6 +9,7 @@ import '../widgets/gradient_button.dart';
 import '../providers/providers.dart';
 import '../services/firestore_service.dart';
 import '../services/bot_service.dart';
+import '../services/scanner_service.dart';
 import '../models/card_model.dart';
 import '../models/game_model.dart';
 
@@ -429,6 +430,12 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
 
               const SizedBox(height: 24),
 
+              // ── Scanner / Card Assignment Panel (host only) ──────────────
+              if (game.hostId == user.id)
+                _ScannerPanel(game: game),
+
+              const SizedBox(height: 24),
+
               // Actions
               if (!hasFolded && isMyTurn) ...[
                 Text('Actions',
@@ -622,6 +629,573 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scanner / Card-Assignment Panel  (shown to the host only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Displays the live scanner state and lets the host route scanned (or
+/// manually-entered) cards into the correct destination:
+///
+///  * Pre-flop  → hole hands (host selects target player)
+///  * Flop/Turn/River → community cards (appended automatically)
+///
+/// When the scanner is offline a manual card-entry fallback is shown.
+class _ScannerPanel extends ConsumerStatefulWidget {
+  final GameModel game;
+  const _ScannerPanel({required this.game});
+
+  @override
+  ConsumerState<_ScannerPanel> createState() => _ScannerPanelState();
+}
+
+class _ScannerPanelState extends ConsumerState<_ScannerPanel> {
+  String? _selectedPlayerId;
+
+  // ─── Manual entry ──────────────────────────────────────────────────────────
+
+  void _showManualEntryDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => _ManualCardEntryDialog(
+        onCard: (card) {
+          Navigator.pop(context);
+          _routeCard(card);
+        },
+      ),
+    );
+  }
+
+  // ─── Routing ───────────────────────────────────────────────────────────────
+
+  Future<void> _routeCard(CardModel card) async {
+    final game = widget.game;
+    if (game.currentRound == BettingRound.preflop) {
+      final targetId = _selectedPlayerId;
+      if (targetId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Select a player to assign the hole card to')),
+          );
+        }
+        return;
+      }
+      await FirestoreService.assignHoleCard(game.id, game, targetId, card);
+    } else {
+      await FirestoreService.assignCommunityCard(game.id, game, card);
+    }
+
+    // Consume the pending card from the scanner queue
+    ref.read(scannerServiceProvider.notifier).consumePending();
+  }
+
+  // ─── Simulated scan trigger (demo helper for host) ─────────────────────────
+
+  /// Injects the next pending card from the scanner service into the game.
+  Future<void> _consumeNextPending() async {
+    final scanner = ref.read(scannerServiceProvider);
+    if (scanner.pendingCards.isEmpty) return;
+    await _routeCard(scanner.pendingCards.first);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scanner = ref.watch(scannerServiceProvider);
+    final game = widget.game;
+    final isPreflop = game.currentRound == BettingRound.preflop;
+    final humanPlayers = game.playerIds
+        .where((id) => !BotService.isBot(id))
+        .toList();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: scanner.isOnline
+              ? AppColors.primary.withValues(alpha: 0.3)
+              : AppColors.outlineVariant.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Icon(
+                Icons.contactless_outlined,
+                size: 16,
+                color: scanner.isOnline
+                    ? AppColors.primary
+                    : AppColors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'CARD SCANNER',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              // Toggle scanner online/offline (demo)
+              GestureDetector(
+                onTap: () => ref
+                    .read(scannerServiceProvider.notifier)
+                    .setOnline(!scanner.isOnline),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scanner.isOnline
+                        ? AppColors.primary.withValues(alpha: 0.15)
+                        : AppColors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: scanner.isOnline
+                          ? AppColors.primary.withValues(alpha: 0.4)
+                          : AppColors.outlineVariant.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Text(
+                    scanner.isOnline ? 'Online' : 'Offline',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: scanner.isOnline
+                          ? AppColors.primary
+                          : AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Pending scanned cards queue
+          if (scanner.pendingCards.isNotEmpty) ...[
+            Text(
+              'Pending',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.onSurfaceVariant,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: scanner.pendingCards.take(5).map((card) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: _MiniCard(card: card),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Pre-flop: player selector
+          if (isPreflop) ...[
+            Text(
+              'Assign hole card to:',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: humanPlayers.map((pid) {
+                final name =
+                    game.playerNames[pid] ?? pid.substring(0, 6);
+                final isSelected = _selectedPlayerId == pid;
+                return GestureDetector(
+                  onTap: () =>
+                      setState(() => _selectedPlayerId = pid),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary.withValues(alpha: 0.15)
+                          : AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary.withValues(alpha: 0.5)
+                            : AppColors.outlineVariant
+                                .withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Text(
+                      name,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Action row: assign pending card + manual entry
+          Row(
+            children: [
+              if (scanner.pendingCards.isNotEmpty)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _consumeNextPending,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            AppColors.primary,
+                            AppColors.primaryContainer
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          isPreflop
+                              ? 'ASSIGN HOLE CARD'
+                              : 'PLACE ON BOARD',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onPrimary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (scanner.pendingCards.isNotEmpty)
+                const SizedBox(width: 10),
+              // Manual entry fallback (always available)
+              Expanded(
+                child: GestureDetector(
+                  onTap: _showManualEntryDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color:
+                            AppColors.outlineVariant.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.edit_outlined,
+                              size: 13, color: AppColors.onSurfaceVariant),
+                          const SizedBox(width: 5),
+                          Text(
+                            scanner.isOnline
+                                ? 'MANUAL ENTRY'
+                                : 'ENTER CARD',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurfaceVariant,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (!scanner.isOnline) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 13,
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6)),
+                const SizedBox(width: 6),
+                Text(
+                  'Scanner offline — use manual entry to add cards',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color:
+                        AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Small card chip widget used in the pending-cards list
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MiniCard extends StatelessWidget {
+  final CardModel card;
+  const _MiniCard({required this.card});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 48,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              card.rank,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+                height: 1.0,
+              ),
+            ),
+            Center(
+              child: Text(
+                card.suitSymbol,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: card.suitColor,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual card entry dialog  (offline fallback)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ManualCardEntryDialog extends StatefulWidget {
+  final void Function(CardModel) onCard;
+  const _ManualCardEntryDialog({required this.onCard});
+
+  @override
+  State<_ManualCardEntryDialog> createState() => _ManualCardEntryDialogState();
+}
+
+class _ManualCardEntryDialogState extends State<_ManualCardEntryDialog> {
+  static const _ranks = [
+    '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'
+  ];
+  static const _suits = ['s', 'h', 'd', 'c'];
+  static const _suitLabels = {'s': '♠', 'h': '♥', 'd': '♦', 'c': '♣'};
+
+  String? _rank;
+  String? _suit;
+
+  @override
+  Widget build(BuildContext context) {
+    final canSubmit = _rank != null && _suit != null;
+
+    return AlertDialog(
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      contentPadding: const EdgeInsets.all(24),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter Card Manually',
+              style: GoogleFonts.manrope(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Rank picker
+            Text('Rank',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                )),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _ranks.map((r) {
+                final selected = _rank == r;
+                return GestureDetector(
+                  onTap: () => setState(() => _rank = r),
+                  child: Container(
+                    width: 40,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.primary.withValues(alpha: 0.15)
+                          : AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: selected
+                            ? AppColors.primary.withValues(alpha: 0.5)
+                            : AppColors.outlineVariant.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        r,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // Suit picker
+            Text('Suit',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                )),
+            const SizedBox(height: 8),
+            Row(
+              children: _suits.map((s) {
+                final selected = _suit == s;
+                final isRed = s == 'h' || s == 'd';
+                final suitColor = isRed
+                    ? const Color(0xFFE57373)
+                    : AppColors.onSurface;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _suit = s),
+                    child: Container(
+                      width: 52,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? suitColor.withValues(alpha: 0.12)
+                            : AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: selected
+                              ? suitColor.withValues(alpha: 0.5)
+                              : AppColors.outlineVariant.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _suitLabels[s]!,
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: selected ? suitColor : AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    child: Text('Cancel',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurfaceVariant,
+                        )),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: canSubmit
+                        ? () => widget.onCard(
+                            CardModel(rank: _rank!, suit: _suit!))
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text('Add Card',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onPrimary,
+                        )),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -835,14 +1409,12 @@ class _EditStackDialogState extends State<_EditStackDialog> {
 
 class _CommunityCard extends StatelessWidget {
   final CardModel card;
-  final double width;
-  final double height;
-  const _CommunityCard({required this.card, this.width = 44, this.height = 60});
+  const _CommunityCard({required this.card});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: width, height: height,
+      width: 44, height: 60,
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
