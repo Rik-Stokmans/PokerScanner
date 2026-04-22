@@ -4,7 +4,7 @@ The scanner hardware sends opaque raw chip IDs — it has no knowledge of card r
 
 ---
 
-- [ ] **Platform & dependency setup** — Wire in `flutter_blue_plus` and `permission_handler`, then configure all required Bluetooth and location permissions across Android manifests and iOS plist entries so the app is authorised to scan and connect on both platforms.
+- [x] **Platform & dependency setup** — Wire in `flutter_blue_plus` and `permission_handler`, then configure all required Bluetooth and location permissions across Android manifests and iOS plist entries so the app is authorised to scan and connect on both platforms.
 
 - [x] **BLE protocol definition** — Hardware contract confirmed from firmware (`Poker_RFID_Reader.ino`):
   - Device name: `"RFID Scanner"` (ESP32-C3, MAC `58:8c:81:b0:90:1c`)
@@ -15,26 +15,26 @@ The scanner hardware sends opaque raw chip IDs — it has no knowledge of card r
   - No card-removed or idle events; absence of notifications implies no card
   - Two readers: `R1` and `R2` can fire independently in the same scan cycle
 
-- [ ] **Core data models** — Introduce a `DeckModel` that maps raw chip IDs to card identifiers, add a `deckId` reference to `GameModel`, and create a lightweight `ScannerDevice` model that wraps discovery results with human-readable signal strength.
+- [x] **Core data models** — Introduce a `DeckModel` that maps raw chip IDs to card identifiers, add a `deckId` reference to `GameModel`, and create a lightweight `ScannerDevice` model that wraps discovery results with human-readable signal strength.
 
-- [ ] **Firestore deck collection** — Build out full CRUD for decks including live streaming of a user's deck list, atomic per-card mapping writes that are safe to call during registration, and a host-only method for assigning a deck to a table — backed by security rules that restrict writes to the deck owner.
+- [x] **Firestore deck collection** — Build out full CRUD for decks including live streaming of a user's deck list, atomic per-card mapping writes that are safe to call during registration, and a host-only method for assigning a deck to a table — backed by security rules that restrict writes to the deck owner.
 
-- [ ] **BLE scanner service** — Build a singleton service that handles the full device lifecycle: scanning, connecting, subscribing to chip notifications, converting raw bytes to hex IDs on a stream, auto-reconnecting on unexpected drops, and persisting the last paired device for startup reconnection.
+- [x] **BLE scanner service** — Build a singleton service that handles the full device lifecycle: scanning, connecting, subscribing to chip notifications, converting raw bytes to hex IDs on a stream, auto-reconnecting on unexpected drops, and persisting the last paired device for startup reconnection.
 
-- [ ] **State management** — Expose the scanner and deck layer to the UI through Riverpod providers covering connection state, discovered devices, the raw chip ID stream, the user's deck list, and the active deck for the current table.
+- [x] **State management** — Expose the scanner and deck layer to the UI through Riverpod providers covering connection state, discovered devices, the raw chip ID stream, the user's deck list, and the active deck for the current table.
 
-- [ ] **Deck registration screen** — Create a guided flow where the organizer connects the scanner then presents each physical card to the device one at a time; the app prompts which card to scan next, records the mapping live to Firestore as each chip is read, shows progress across all 52 cards, and ends with a naming step before saving the completed deck.
+- [x] **Deck registration screen** — Create a guided flow where the organizer connects the scanner then presents each physical card to the device one at a time; the app prompts which card to scan next, records the mapping live to Firestore as each chip is read, shows progress across all 52 cards, and ends with a naming step before saving the completed deck.
 
-- [ ] **Deck management screen** — Give users a place to view all their registered decks, resume incomplete registrations, rename or delete decks, and kick off new registrations — with the scanner connection gating access to anything that requires hardware.
+- [x] **Deck management screen** — Give users a place to view all their registered decks, resume incomplete registrations, rename or delete decks, and kick off new registrations — with the scanner connection gating access to anything that requires hardware.
 
-- [ ] **Scanner setup screen** — Replace the hardcoded placeholder UI with a live BLE scan that populates real devices sorted by signal strength, a genuine connect flow with loading and error states, and a path into deck management once connected.
+- [x] **Scanner setup screen** — Replace the hardcoded placeholder UI with a live BLE scan that populates real devices sorted by signal strength, a genuine connect flow with loading and error states, and a path into deck management once connected.
 
-- [ ] **Scanner status badge** — Convert the badge from a static prop to a live consumer of connection state so it accurately reflects connected, reconnecting, and offline conditions across every screen it appears on.
+- [x] **Scanner status badge** — Convert the badge from a static prop to a live consumer of connection state so it accurately reflects connected, reconnecting, and offline conditions across every screen it appears on.
 
-- [ ] **Poker table integration** — Pipe incoming chip IDs through the active deck's lookup at the table screen, routing resolved cards into hole hands or community cards based on the current betting round, guarding deck selection behind the host role, and providing a manual entry fallback when the scanner is offline.
+- [x] **Poker table integration** — Pipe incoming chip IDs through the active deck's lookup at the table screen, routing resolved cards into hole hands or community cards based on the current betting round, guarding deck selection behind the host role, and providing a manual entry fallback when the scanner is offline.
 
-- [ ] **Startup auto-reconnect** — On launch, silently attempt to restore the last paired device connection before the user reaches the lobby, suppressing the attempt only if they previously disconnected intentionally.
+- [x] **Startup auto-reconnect** — On launch, silently attempt to restore the last paired device connection before the user reaches the lobby, suppressing the attempt only if they previously disconnected intentionally.
 
-- [ ] **Permission handling** — Add a runtime permission request flow before any scan is initiated, with graceful degradation to a settings-redirect dialog if permissions are permanently denied and a Bluetooth-off prompt when the adapter is disabled.
+- [x] **Permission handling** — Add a runtime permission request flow before any scan is initiated, with graceful degradation to a settings-redirect dialog if permissions are permanently denied and a Bluetooth-off prompt when the adapter is disabled.
 
-- [ ] **Testing & validation** — Cover deck resolution logic, BLE reconnect behaviour, and raw byte parsing with unit tests, then validate the full registration and gameplay flows end-to-end on physical hardware across both Android and iOS.
+- [x] **Testing & validation** — Cover deck resolution logic, BLE reconnect behaviour, and raw byte parsing with unit tests, then validate the full registration and gameplay flows end-to-end on physical hardware across both Android and iOS.
