@@ -7,6 +7,7 @@
 .pub/
 build/
 pubspec.lock
+.metadata
 
 # Android
 android/.gradle/
@@ -14,6 +15,7 @@ android/app/debug/
 android/app/profile/
 android/app/release/
 android/local.properties
+**/GeneratedPluginRegistrant.java
 
 # iOS
 ios/Flutter/App.framework
@@ -24,6 +26,7 @@ ios/Flutter/ephemeral/
 ios/Flutter/app.flx
 ios/Flutter/app.zip
 ios/Flutter/flutter_assets/
+ios/Pods/
 ios/ServiceDefinitions.json
 ios/Runner/GeneratedPluginRegistrant.*
 *.xcworkspace
@@ -42,6 +45,7 @@ Thumbs.db
 # Misc
 .env
 .env.local
+stitch mcp commands
 
 # Firebase config (contains API keys — regenerate via `flutterfire configure`)
 lib/firebase_options.dart
