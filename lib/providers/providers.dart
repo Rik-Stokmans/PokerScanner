@@ -222,3 +222,16 @@ final userDecksProvider = StreamProvider<List<DeckModel>>((ref) {
     error: (_, __) => Stream.value([]),
   );
 });
+
+/// The ID of the deck currently assigned to the active table.
+final activeDeckIdProvider = Provider<String?>((ref) {
+  final game = ref.watch(activeGameProvider).value;
+  return game?.deckId;
+});
+
+/// Live [DeckModel] for the deck assigned to the active table.
+final activeDeckProvider = StreamProvider<DeckModel?>((ref) {
+  final deckId = ref.watch(activeDeckIdProvider);
+  if (deckId == null) return Stream.value(null);
+  return FirestoreService.getDeckStream(deckId);
+});
