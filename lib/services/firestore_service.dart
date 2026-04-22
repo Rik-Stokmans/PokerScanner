@@ -486,20 +486,33 @@ class FirestoreService {
 
   static Future<void> respondToInvitation(
       String invitationId, String response, String userId) async {
-    await _db.collection('invitations').doc(invitationId).update({
-      'status': response,
-    });
     if (response == 'accepted') {
-      final inv = await _db.collection('invitations').doc(invitationId).get();
-      final data = inv.data()!;
-      final gameId = data['gameId'] as String;
-      await _db.collection('games').doc(gameId).update({
-        'playerIds': FieldValue.arrayUnion([userId]),
-      });
-      await _db.collection('users').doc(userId).update({
-        'currentGameId': gameId,
-        'status': 'in_game',
-      });
+      final invDoc =
+          await _db.collection('invitations').doc(invitationId).get();
+      final data = invDoc.data();
+      if (data == null) {
+        throw StateError(
+            'Invitation $invitationId not found; it may have been deleted.');
+      }
+      final gameId = data['gameId'] as String?;
+      if (gameId == null || gameId.isEmpty) {
+        throw StateError(
+            'Invitation $invitationId is missing a valid gameId.');
+      }
+
+      final batch = _db.batch();
+      batch.update(
+          _db.collection('invitations').doc(invitationId), {'status': response});
+      batch.update(_db.collection('games').doc(gameId),
+          {'playerIds': FieldValue.arrayUnion([userId])});
+      batch.update(_db.collection('users').doc(userId),
+          {'currentGameId': gameId, 'status': 'in_game'});
+      await batch.commit();
+    } else {
+      await _db
+          .collection('invitations')
+          .doc(invitationId)
+          .update({'status': response});
     }
   }
 
