@@ -5,6 +5,7 @@ import '../models/game_model.dart';
 import '../models/hand_model.dart';
 import '../models/invitation_model.dart';
 import '../models/friendship_model.dart';
+import '../models/deck_model.dart';
 import '../services/firestore_service.dart';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────
@@ -185,4 +186,19 @@ final pendingFriendRequestsProvider = Provider<List<FriendshipModel>>((ref) {
   final user = ref.watch(currentUserProvider).value;
   if (user == null) return [];
   return friendships.where((f) => f.isPending(user.id)).toList();
+});
+
+// ─── Decks ────────────────────────────────────────────────────────────────
+
+/// Live list of decks owned by the currently signed-in user.
+final userDecksProvider = StreamProvider<List<DeckModel>>((ref) {
+  final userAsync = ref.watch(currentUserProvider);
+  return userAsync.when(
+    data: (user) {
+      if (user == null) return Stream.value([]);
+      return FirestoreService.getUserDecksStream(user.id);
+    },
+    loading: () => Stream.value([]),
+    error: (_, __) => Stream.value([]),
+  );
 });

@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid);
+      allow delete: if false;
+    }
+
+    // ── Games ─────────────────────────────────────────────────────────────────
+    match /games/{gameId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() &&
+                       request.auth.uid in resource.data.playerIds;
+      allow delete: if isSignedIn() &&
+                       request.auth.uid == resource.data.hostId;
+
+      match /hands/{handId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
+    }
+
+    // ── Invitations ───────────────────────────────────────────────────────────
+    match /invitations/{invitationId} {
+      allow read: if isSignedIn() &&
+                     (request.auth.uid == resource.data.fromUserId ||
+                      request.auth.uid == resource.data.toUserId);
+      allow create: if isSignedIn() &&
+                       request.auth.uid == request.resource.data.fromUserId;
+      allow update: if isSignedIn() &&
+                       request.auth.uid == resource.data.toUserId;
+      allow delete: if false;
+    }
+
+    // ── Friendships ───────────────────────────────────────────────────────────
+    match /friendships/{friendshipId} {
+      allow read: if isSignedIn() &&
+                     (request.auth.uid == resource.data.userId ||
+                      request.auth.uid == resource.data.friendId);
+      allow create: if isSignedIn() &&
+                       request.auth.uid == request.resource.data.userId;
+      allow update: if isSignedIn() &&
+                       (request.auth.uid == resource.data.userId ||
+                        request.auth.uid == resource.data.friendId);
+      allow delete: if isSignedIn() &&
+                       (request.auth.uid == resource.data.userId ||
+                        request.auth.uid == resource.data.friendId);
+    }
+
+    // ── Decks ─────────────────────────────────────────────────────────────────
+    //
+    // A deck document lives at /decks/{deckId}.
+    // Card mappings live at   /decks/{deckId}/cards/{rfidUid}.
+    //
+    // Security invariants:
+    //   • Only the deck owner may create, update, or delete the deck document.
+    //   • Any signed-in user may read a deck (needed so a table host can look
+    //     up a deck assigned to their game).
+    //   • Card mappings inherit ownership — only the deck owner may write them.
+    //     Reads are open to any authenticated user so dealers can resolve cards.
+    //   • The assignedTableId field may only be changed by the deck owner,
+    //     which the top-level update rule already enforces.
+
+    match /decks/{deckId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if isOwner(resource.data.ownerId);
+
+      allow delete: if isOwner(resource.data.ownerId);
+
+      match /cards/{rfidUid} {
+        allow read: if isSignedIn();
+
+        // Writes (create / update / delete) are restricted to the deck owner.
+        // We look up the parent deck to verify ownership.
+        allow write: if isSignedIn() &&
+                        get(/databases/$(database)/documents/decks/$(deckId))
+                          .data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

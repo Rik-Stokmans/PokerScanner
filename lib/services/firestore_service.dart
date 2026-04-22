@@ -5,6 +5,7 @@ import '../models/hand_model.dart';
 import '../models/card_model.dart';
 import '../models/invitation_model.dart';
 import '../models/friendship_model.dart';
+import '../models/deck_model.dart';
 import '../services/hand_evaluator.dart';
 
 class FirestoreService {
@@ -587,6 +588,95 @@ class FirestoreService {
       'communityCards': updated.map((c) => c.toMap()).toList(),
     });
   }
+
+// ─── Decks ────────────────────────────────────────────────────────────────
+
+  /// Live stream of all decks owned by [ownerId].
+  static Stream<List<DeckModel>> getUserDecksStream(String ownerId) => _db
+      .collection('decks')
+      .where('ownerId', isEqualTo: ownerId)
+      .orderBy('createdAt', descending: true)
+      .snapshots()
+      .map((s) => s.docs.map((d) => DeckModel.fromMap(d.id, d.data())).toList());
+
+  /// Create a new deck document owned by [ownerId].
+  static Future<DeckModel> createDeck({
+    required String ownerId,
+    required String name,
+  }) async {
+    final deck = DeckModel(
+      id: '',
+      ownerId: ownerId,
+      name: name,
+      createdAt: DateTime.now(),
+    );
+    final ref = await _db.collection('decks').add(deck.toMap());
+    return DeckModel.fromMap(ref.id, deck.toMap());
+  }
+
+  /// Rename an existing deck. Only the deck owner should call this.
+  static Future<void> updateDeckName(String deckId, String newName) =>
+      _db.collection('decks').doc(deckId).update({'name': newName});
+
+  /// Delete a deck and all its card-mapping sub-documents.
+  ///
+  /// Sub-collection documents are deleted in a batched write so the operation
+  /// is efficient even for a full 52-card deck.
+  static Future<void> deleteDeck(String deckId) async {
+    final cardsSnap =
+        await _db.collection('decks').doc(deckId).collection('cards').get();
+
+    final batch = _db.batch();
+    for (final doc in cardsSnap.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(_db.collection('decks').doc(deckId));
+    await batch.commit();
+  }
+
+  /// Atomically write (or overwrite) a single card mapping for a deck.
+  ///
+  /// [rfidUid] is the hex UID read from the RFID tag.
+  /// [cardCode] is the canonical "rank:suit" string, e.g. "A:s" or "10:h".
+  ///
+  /// Uses [SetOptions(merge: true)] so repeated calls during registration are
+  /// safe — a re-scan of the same tag simply overwrites its mapping.
+  static Future<void> upsertCardMapping({
+    required String deckId,
+    required String rfidUid,
+    required String cardCode,
+  }) =>
+      _db
+          .collection('decks')
+          .doc(deckId)
+          .collection('cards')
+          .doc(rfidUid)
+          .set({'cardCode': cardCode}, SetOptions(merge: true));
+
+  /// Read back all card mappings for a deck as a {rfidUid → cardCode} map.
+  static Future<Map<String, String>> getCardMappings(String deckId) async {
+    final snap = await _db
+        .collection('decks')
+        .doc(deckId)
+        .collection('cards')
+        .get();
+    return {for (final d in snap.docs) d.id: d.data()['cardCode'] as String};
+  }
+
+  /// Assign a deck to a table/game. Only the deck owner (host) should call
+  /// this; the companion security rules enforce ownership on the server side.
+  static Future<void> assignDeckToTable({
+    required String deckId,
+    required String tableId,
+  }) =>
+      _db
+          .collection('decks')
+          .doc(deckId)
+          .update({'assignedTableId': tableId});
+
+  /// Remove a deck's table assignment.
+  static Future<void> unassignDeck(String deckId) =>
+      _db.collection('decks').doc(deckId).update({'assignedTableId': null});
 }
 
 extension GameModelCopyWith on GameModel {
