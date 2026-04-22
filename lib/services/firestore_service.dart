@@ -677,6 +677,13 @@ class FirestoreService {
   /// Remove a deck's table assignment.
   static Future<void> unassignDeck(String deckId) =>
       _db.collection('decks').doc(deckId).update({'assignedTableId': null});
+
+  /// Live stream of a single deck document.
+  static Stream<DeckModel?> getDeckStream(String deckId) => _db
+      .collection('decks')
+      .doc(deckId)
+      .snapshots()
+      .map((s) => s.exists ? DeckModel.fromMap(s.id, s.data()!) : null);
 }
 
 extension GameModelCopyWith on GameModel {
