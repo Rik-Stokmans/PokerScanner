@@ -6,7 +6,6 @@ import '../models/card_model.dart';
 import '../models/deck_model.dart';
 import '../models/invitation_model.dart';
 import '../models/friendship_model.dart';
-import '../models/deck_model.dart';
 import '../services/hand_evaluator.dart';
 
 class FirestoreService {

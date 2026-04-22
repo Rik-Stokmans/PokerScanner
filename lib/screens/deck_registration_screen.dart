@@ -74,7 +74,7 @@ class _DeckRegistrationScreenState
     final user = ref.read(currentUserProvider).value;
     if (user == null) return;
     final deck =
-        await FirestoreService.createDeck(user.id, 'New Deck');
+        await FirestoreService.createDeck(ownerId: user.id, name: 'New Deck');
     setState(() {
       _deckId = deck.id;
       _nameController.text = deck.name;
@@ -117,7 +117,7 @@ class _DeckRegistrationScreenState
       _nextIndex++;
     });
 
-    await FirestoreService.recordChipMapping(_deckId!, chipUid, key);
+    await FirestoreService.upsertCardMapping(deckId: _deckId!, rfidUid: chipUid, cardCode: key);
 
     if (_nextIndex == 52) {
       setState(() => _isNamingStep = true);
@@ -137,7 +137,7 @@ class _DeckRegistrationScreenState
     if (name.isEmpty) return;
 
     setState(() => _isSaving = true);
-    await FirestoreService.finaliseDeck(_deckId!, name);
+    await FirestoreService.updateDeckName(_deckId!, name);
     if (mounted) {
       context.go('/decks');
     }

@@ -12,7 +12,7 @@ import '../widgets/scanner_status_badge.dart';
 final _decksProvider = StreamProvider.autoDispose<List<DeckModel>>((ref) {
   final user = ref.watch(currentUserProvider).value;
   if (user == null) return Stream.value([]);
-  return FirestoreService.getDecksStream(user.id);
+  return FirestoreService.getUserDecksStream(user.id);
 });
 
 class DeckManagementScreen extends ConsumerStatefulWidget {
@@ -237,8 +237,8 @@ class _DeckTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isIncomplete = deck.isIncomplete;
-    final progress = deck.scannedCount / deck.totalCards;
+    final isIncomplete = !deck.isComplete;
+    final progress = deck.mappedCount / 52;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -270,7 +270,7 @@ class _DeckTile extends ConsumerWidget {
                     const SizedBox(height: 3),
                     Text(
                       isIncomplete
-                          ? '${deck.scannedCount}/52 cards · incomplete'
+                          ? '${deck.mappedCount}/52 cards · incomplete'
                           : '52/52 cards · complete',
                       style: GoogleFonts.inter(
                         fontSize: 12,
@@ -449,7 +449,7 @@ class _OverflowMenu extends ConsumerWidget {
     );
     controller.dispose();
     if (result != null && result.isNotEmpty) {
-      await FirestoreService.renameDeck(deck.id, result);
+      await FirestoreService.updateDeckName(deck.id, result);
     }
   }
 

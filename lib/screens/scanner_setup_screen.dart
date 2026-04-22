@@ -2,6 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_colors.dart';
+import '../widgets/scanner_status_badge.dart';
+import '../widgets/gradient_button.dart';
+import '../services/ble_service.dart';
+
+class ScannerSetupScreen extends ConsumerStatefulWidget {
+  const ScannerSetupScreen({super.key});
+
+  @override
+  ConsumerState<ScannerSetupScreen> createState() =>
+      _ScannerSetupScreenState();
 }
 
 class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
@@ -79,26 +93,6 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
     super.dispose();
   }
 
-  Future<void> _connect() async {
-    final target = _selectedDevice;
-    if (target == null) return;
-    await ref.read(bleProvider.notifier).connectTo(target);
-
-    if (!mounted) return;
-    final bleState = ref.read(bleProvider);
-    if (bleState.connectionStatus == ScannerConnectionStatus.connected) {
-      // Navigate to deck management (lobby) once connected
-      context.go('/lobby');
-    } else if (bleState.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(bleState.errorMessage!),
-          backgroundColor: AppColors.errorContainer,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final bleState = BleService.instance.state;
@@ -112,13 +106,12 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ────────────────────────────────────────────────
               Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new,
                         color: AppColors.onSurface, size: 20),
-                    onPressed: isConnecting ? null : () => context.pop(),
+                    onPressed: () => context.pop(),
                   ),
                   const SizedBox(width: 8),
                   Column(
@@ -139,7 +132,6 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                 ],
               ),
               const SizedBox(height: 36),
-
               Text(
                 'Pair your scanner',
                 style: GoogleFonts.manrope(
@@ -158,8 +150,6 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                 ),
               ),
               const SizedBox(height: 40),
-
-              // ── Scanning / connecting animation ───────────────────────
               Center(
                 child: AnimatedBuilder(
                   animation: _pulseAnimation,
@@ -172,11 +162,8 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                           height: 100 * _pulseAnimation.value,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isConnecting
-                                ? AppColors.tertiary
-                                    .withOpacity(0.05 * _pulseAnimation.value)
-                                : AppColors.primary
-                                    .withOpacity(0.05 * _pulseAnimation.value),
+                            color: AppColors.primary
+                                .withOpacity(0.05 * _pulseAnimation.value),
                           ),
                         ),
                         Container(
@@ -186,13 +173,9 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                             shape: BoxShape.circle,
                             color: AppColors.surfaceContainerHighest,
                           ),
-                          child: Icon(
-                            isConnecting
-                                ? Icons.bluetooth_connected
-                                : Icons.bluetooth_searching,
-                            color: isConnecting
-                                ? AppColors.tertiary
-                                : AppColors.primary,
+                          child: const Icon(
+                            Icons.bluetooth_searching,
+                            color: AppColors.primary,
                             size: 36,
                           ),
                         ),
@@ -228,43 +211,13 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                 ),
               ],
               const SizedBox(height: 32),
-
-              // ── Device list header ────────────────────────────────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Available Devices',
-                    style: GoogleFonts.manrope(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  if (!isScanning && !isConnecting)
-                    TextButton.icon(
-                      onPressed: () {
-                        setState(() => _selectedDevice = null);
-                        ref.read(bleProvider.notifier).startScan();
-                      },
-                      icon: const Icon(Icons.refresh,
-                          size: 16, color: AppColors.primary),
-                      label: Text(
-                        'Rescan',
-                        style: GoogleFonts.inter(
-                            fontSize: 13, color: AppColors.primary),
-                      ),
-                    ),
-                  if (isScanning)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                ],
+              Text(
+                'Available Devices',
+                style: GoogleFonts.manrope(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
               ),
               const SizedBox(height: 12),
               Expanded(
@@ -349,8 +302,6 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                         },
                       ),
               ),
-
-              // ── Footer ────────────────────────────────────────────────
               const SizedBox(height: 8),
               Text(
                 'Paired: ${_selectedDevice != null ? (_selectedDevice!.platformName.isNotEmpty ? _selectedDevice!.platformName : _selectedDevice!.remoteId.str) : "None"}',
