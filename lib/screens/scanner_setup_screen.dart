@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../widgets/scanner_status_badge.dart';
 import '../widgets/gradient_button.dart';
+import '../services/bluetooth_permission_service.dart';
 
 class ScannerSetupScreen extends StatefulWidget {
   const ScannerSetupScreen({super.key});
@@ -17,6 +18,8 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   int? _selectedDevice;
+  bool _scanReady = false;
+  bool _checkingPermissions = true;
 
   final List<Map<String, dynamic>> _devices = [
     {'name': 'SilentReader-8B', 'status': 'Ready to pair', 'strength': 'strong'},
@@ -33,12 +36,44 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
     _pulseAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    // Request permissions as soon as the screen is visible.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePermissions());
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  /// Checks Bluetooth readiness and shows the appropriate dialog when something
+  /// is missing. Sets [_scanReady] to true only when everything is granted.
+  Future<void> _ensurePermissions() async {
+    if (!mounted) return;
+    setState(() => _checkingPermissions = true);
+
+    final readiness = await BluetoothPermissionService.checkReadiness();
+
+    if (!mounted) return;
+    setState(() => _checkingPermissions = false);
+
+    switch (readiness) {
+      case BluetoothReadiness.ready:
+        setState(() => _scanReady = true);
+
+      case BluetoothReadiness.bluetoothOff:
+        await BluetoothPermissionService.showBluetoothOffDialog(context);
+        // After the dialog the user may have enabled BT; re-check.
+        if (mounted) _ensurePermissions();
+
+      case BluetoothReadiness.permissionPermanentlyDenied:
+        await BluetoothPermissionService.showPermanentlyDeniedDialog(context);
+        // User must go to Settings; no automatic re-check.
+
+      case BluetoothReadiness.permissionDenied:
+        await BluetoothPermissionService.showPermissionDeniedDialog(context);
+        // Give the user a chance to grant on next attempt.
+    }
   }
 
   @override
@@ -118,9 +153,15 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                             shape: BoxShape.circle,
                             color: AppColors.surfaceContainerHighest,
                           ),
-                          child: const Icon(
-                            Icons.bluetooth_searching,
-                            color: AppColors.primary,
+                          child: Icon(
+                            _checkingPermissions
+                                ? Icons.bluetooth_searching
+                                : _scanReady
+                                    ? Icons.bluetooth_searching
+                                    : Icons.bluetooth_disabled,
+                            color: _scanReady || _checkingPermissions
+                                ? AppColors.primary
+                                : AppColors.onSurfaceVariant,
                             size: 36,
                           ),
                         ),
@@ -131,14 +172,34 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
               ),
               const SizedBox(height: 12),
               Center(
-                child: Text(
-                  'Searching...',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.onSurfaceVariant,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                child: _checkingPermissions
+                    ? Text(
+                        'Checking permissions...',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: AppColors.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      )
+                    : _scanReady
+                        ? Text(
+                            'Searching...',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: AppColors.onSurfaceVariant,
+                              letterSpacing: 0.5,
+                            ),
+                          )
+                        : TextButton(
+                            onPressed: _ensurePermissions,
+                            child: Text(
+                              'Grant permissions to scan',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
               ),
               const SizedBox(height: 32),
               Text(
@@ -160,7 +221,7 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                     final isStrong = device['strength'] == 'strong';
 
                     return GestureDetector(
-                      onTap: isStrong
+                      onTap: isStrong && _scanReady
                           ? () => setState(() => _selectedDevice = index)
                           : null,
                       child: Container(
@@ -179,7 +240,7 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                           children: [
                             Icon(
                               Icons.bluetooth,
-                              color: isStrong
+                              color: isStrong && _scanReady
                                   ? AppColors.primary
                                   : AppColors.onSurfaceVariant,
                               size: 22,
@@ -194,7 +255,7 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                                     style: GoogleFonts.inter(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: isStrong
+                                      color: isStrong && _scanReady
                                           ? AppColors.onSurface
                                           : AppColors.onSurfaceVariant,
                                     ),
@@ -204,7 +265,7 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                                     device['status'] as String,
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
-                                      color: isStrong
+                                      color: isStrong && _scanReady
                                           ? AppColors.primary
                                           : AppColors.onSurfaceVariant
                                               .withOpacity(0.6),
@@ -235,7 +296,7 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
               GradientButton(
                 label: 'CONNECT',
                 icon: Icons.bluetooth_connected,
-                onPressed: _selectedDevice != null
+                onPressed: _selectedDevice != null && _scanReady
                     ? () => context.pop()
                     : null,
               ),
