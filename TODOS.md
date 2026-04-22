@@ -38,3 +38,17 @@ The scanner hardware sends opaque raw chip IDs — it has no knowledge of card r
 - [x] **Permission handling** — Add a runtime permission request flow before any scan is initiated, with graceful degradation to a settings-redirect dialog if permissions are permanently denied and a Bluetooth-off prompt when the adapter is disabled.
 
 - [x] **Testing & validation** — Cover deck resolution logic, BLE reconnect behaviour, and raw byte parsing with unit tests, then validate the full registration and gameplay flows end-to-end on physical hardware across both Android and iOS.
+
+---
+
+# Friend Invitations Bug Fixes
+
+- [x] **Add Firestore composite index for invitations query** — The `getInvitationsStream` query in `firestore_service.dart:452` chains `.where('toUserId')` + `.where('status')` + `.orderBy('createdAt')`, which requires a composite index. Without it Firestore throws and the screen shows "Error loading invitations". Add the index to `firestore.indexes.json` or follow the auto-generated link in the Firebase console error.
+
+- [x] **Add try-catch to onAccept and onDecline callbacks** — In `invitations_screen.dart:125-141` both callbacks call `respondToInvitation()` with no error handling; `onAccept` navigates to `/table` even if the call throws. Wrap each in try-catch, show a SnackBar on error, and only navigate on success.
+
+- [x] **Fix unsafe null assertion in `respondToInvitation`** — In `firestore_service.dart:494`, `inv.data()!` crashes if the document was deleted between the status update and the re-fetch. Replace with a null-safe check and guard the `gameId` cast on line 495.
+
+- [x] **Wrap `respondToInvitation` writes in a Firestore batch/transaction** — In `firestore_service.dart:489-503`, three separate writes (update invitation status, update game `playerIds`, update user `currentGameId`) are not atomic. If the second or third write fails, data is left inconsistent. Use a `WriteBatch` or transaction so all three succeed or all fail together.
+
+- [x] **Improve error state UI in InvitationsScreen** — In `invitations_screen.dart:54-60`, the error state shows a plain "Error loading invitations" with no way to retry. Replace with a widget that displays the error message, a Retry button calling `ref.invalidate(invitationsProvider)`, and error logging.
