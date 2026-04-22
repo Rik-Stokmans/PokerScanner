@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/scanner_service.dart';
+import '../providers/providers.dart';
 import '../theme/app_colors.dart';
 
-/// Displays the scanner online/offline state.
-///
-/// When [isActive] is provided explicitly it overrides the provider value
-/// (useful for screens where no scanner is associated yet).
+/// Displays the live BLE scanner connection state.
+/// Pass [isActive] to override with a fixed value (e.g. in setup screens
+/// before the provider is wired up). When omitted the badge reacts to the
+/// real [scannerConnectedProvider].
 class ScannerStatusBadge extends ConsumerWidget {
-  /// Explicit override; when null the provider value is used.
   final bool? isActive;
 
   const ScannerStatusBadge({super.key, this.isActive});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bool scannerOnline = isActive ??
-        ref.watch(scannerServiceProvider.select((s) => s.isOnline));
+    final bool active = isActive ?? ref.watch(scannerConnectedProvider);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -30,11 +29,9 @@ class ScannerStatusBadge extends ConsumerWidget {
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: scannerOnline
-                  ? AppColors.primary
-                  : AppColors.onSurfaceVariant,
+              color: active ? AppColors.primary : AppColors.onSurfaceVariant,
               shape: BoxShape.circle,
-              boxShadow: scannerOnline
+              boxShadow: active
                   ? [
                       BoxShadow(
                         color: AppColors.surfaceTint.withOpacity(0.4),
@@ -47,13 +44,11 @@ class ScannerStatusBadge extends ConsumerWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            scannerOnline ? 'Scanner Active' : 'Scanner Offline',
+            active ? 'Scanner Active' : 'Scanner Offline',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: scannerOnline
-                  ? AppColors.primary
-                  : AppColors.onSurfaceVariant,
+              color: active ? AppColors.primary : AppColors.onSurfaceVariant,
               letterSpacing: 0.5,
             ),
           ),

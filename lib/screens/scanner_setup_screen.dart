@@ -1,30 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../widgets/scanner_status_badge.dart';
 import '../widgets/gradient_button.dart';
-import '../services/bluetooth_permission_service.dart';
+import '../services/ble_service.dart';
 
-class ScannerSetupScreen extends StatefulWidget {
+class ScannerSetupScreen extends ConsumerStatefulWidget {
   const ScannerSetupScreen({super.key});
 
   @override
-  State<ScannerSetupScreen> createState() => _ScannerSetupScreenState();
+  ConsumerState<ScannerSetupScreen> createState() =>
+      _ScannerSetupScreenState();
 }
 
-class _ScannerSetupScreenState extends State<ScannerSetupScreen>
+class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-  int? _selectedDevice;
-  bool _scanReady = false;
-  bool _checkingPermissions = true;
 
-  final List<Map<String, dynamic>> _devices = [
-    {'name': 'SilentReader-8B', 'status': 'Ready to pair', 'strength': 'strong'},
-    {'name': 'Unknown Device', 'status': 'Weak signal', 'strength': 'weak'},
-  ];
+  final List<BluetoothDevice> _devices = [];
+  BluetoothDevice? _selectedDevice;
+  bool _isConnecting = false;
+  String? _error;
+
+  StreamSubscription<BluetoothDevice>? _scanSub;
 
   @override
   void initState() {
@@ -36,48 +40,64 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
     _pulseAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    // Request permissions as soon as the screen is visible.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePermissions());
+
+    _startScan();
+  }
+
+  void _startScan() {
+    _scanSub?.cancel();
+    setState(() {
+      _devices.clear();
+      _selectedDevice = null;
+      _error = null;
+    });
+
+    _scanSub = BleService.instance
+        .scanForDevices(timeout: const Duration(seconds: 10))
+        .listen(
+      (device) {
+        if (!mounted) return;
+        setState(() {
+          if (!_devices.any((d) => d.remoteId == device.remoteId)) {
+            _devices.add(device);
+          }
+        });
+      },
+      onError: (Object e) {
+        if (!mounted) return;
+        setState(() => _error = e.toString());
+      },
+    );
+  }
+
+  Future<void> _connect() async {
+    if (_selectedDevice == null) return;
+    setState(() {
+      _isConnecting = true;
+      _error = null;
+    });
+    try {
+      await BleService.instance.connectToDevice(_selectedDevice!);
+      if (mounted) context.pop();
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Connection failed: $e');
+    } finally {
+      if (mounted) setState(() => _isConnecting = false);
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _scanSub?.cancel();
     super.dispose();
-  }
-
-  /// Checks Bluetooth readiness and shows the appropriate dialog when something
-  /// is missing. Sets [_scanReady] to true only when everything is granted.
-  Future<void> _ensurePermissions() async {
-    if (!mounted) return;
-    setState(() => _checkingPermissions = true);
-
-    final readiness = await BluetoothPermissionService.checkReadiness();
-
-    if (!mounted) return;
-    setState(() => _checkingPermissions = false);
-
-    switch (readiness) {
-      case BluetoothReadiness.ready:
-        setState(() => _scanReady = true);
-
-      case BluetoothReadiness.bluetoothOff:
-        await BluetoothPermissionService.showBluetoothOffDialog(context);
-        // After the dialog the user may have enabled BT; re-check.
-        if (mounted) _ensurePermissions();
-
-      case BluetoothReadiness.permissionPermanentlyDenied:
-        await BluetoothPermissionService.showPermanentlyDeniedDialog(context);
-        // User must go to Settings; no automatic re-check.
-
-      case BluetoothReadiness.permissionDenied:
-        await BluetoothPermissionService.showPermissionDeniedDialog(context);
-        // Give the user a chance to grant on next attempt.
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final bleState = BleService.instance.state;
+    final isConnected = bleState == BleConnectionState.connected;
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: SafeArea(
@@ -106,7 +126,7 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                           letterSpacing: 2,
                         ),
                       ),
-                      const ScannerStatusBadge(isActive: false),
+                      ScannerStatusBadge(isActive: isConnected),
                     ],
                   ),
                 ],
@@ -153,15 +173,9 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                             shape: BoxShape.circle,
                             color: AppColors.surfaceContainerHighest,
                           ),
-                          child: Icon(
-                            _checkingPermissions
-                                ? Icons.bluetooth_searching
-                                : _scanReady
-                                    ? Icons.bluetooth_searching
-                                    : Icons.bluetooth_disabled,
-                            color: _scanReady || _checkingPermissions
-                                ? AppColors.primary
-                                : AppColors.onSurfaceVariant,
+                          child: const Icon(
+                            Icons.bluetooth_searching,
+                            color: AppColors.primary,
                             size: 36,
                           ),
                         ),
@@ -172,35 +186,30 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
               ),
               const SizedBox(height: 12),
               Center(
-                child: _checkingPermissions
-                    ? Text(
-                        'Checking permissions...',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: AppColors.onSurfaceVariant,
-                          letterSpacing: 0.5,
-                        ),
-                      )
-                    : _scanReady
-                        ? Text(
-                            'Searching...',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: AppColors.onSurfaceVariant,
-                              letterSpacing: 0.5,
-                            ),
-                          )
-                        : TextButton(
-                            onPressed: _ensurePermissions,
-                            child: Text(
-                              'Grant permissions to scan',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
+                child: Text(
+                  _devices.isEmpty
+                      ? 'Searching...'
+                      : '${_devices.length} device(s) found',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    _error!,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.redAccent,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
               const SizedBox(height: 32),
               Text(
                 'Available Devices',
@@ -212,100 +221,109 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: ListView.separated(
-                  itemCount: _devices.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final device = _devices[index];
-                    final isSelected = _selectedDevice == index;
-                    final isStrong = device['strength'] == 'strong';
-
-                    return GestureDetector(
-                      onTap: isStrong && _scanReady
-                          ? () => setState(() => _selectedDevice = index)
-                          : null,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary.withOpacity(0.08)
-                              : AppColors.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(14),
-                          border: isSelected
-                              ? Border.all(
-                                  color: AppColors.primary.withOpacity(0.4))
-                              : null,
+                child: _devices.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No RFID scanners found nearby.',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: AppColors.onSurfaceVariant,
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.bluetooth,
-                              color: isStrong && _scanReady
-                                  ? AppColors.primary
-                                  : AppColors.onSurfaceVariant,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                      )
+                    : ListView.separated(
+                        itemCount: _devices.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final device = _devices[index];
+                          final isSelected =
+                              _selectedDevice?.remoteId == device.remoteId;
+                          final name = device.platformName.isNotEmpty
+                              ? device.platformName
+                              : 'RFID Scanner';
+
+                          return GestureDetector(
+                            onTap: () =>
+                                setState(() => _selectedDevice = device),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.primary.withOpacity(0.08)
+                                    : AppColors.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(14),
+                                border: isSelected
+                                    ? Border.all(
+                                        color: AppColors.primary
+                                            .withOpacity(0.4))
+                                    : null,
+                              ),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    device['name'] as String,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: isStrong && _scanReady
-                                          ? AppColors.onSurface
-                                          : AppColors.onSurfaceVariant,
+                                  const Icon(
+                                    Icons.bluetooth,
+                                    color: AppColors.primary,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.onSurface,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          device.remoteId.str,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color:
+                                                AppColors.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    device['status'] as String,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: isStrong && _scanReady
-                                          ? AppColors.primary
-                                          : AppColors.onSurfaceVariant
-                                              .withOpacity(0.6),
-                                    ),
-                                  ),
+                                  if (isSelected)
+                                    const Icon(Icons.check_circle,
+                                        color: AppColors.primary, size: 20),
                                 ],
                               ),
                             ),
-                            if (isSelected)
-                              const Icon(Icons.check_circle,
-                                  color: AppColors.primary, size: 20),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Paired: ${_selectedDevice != null ? _devices[_selectedDevice!]['name'] : "None"}',
+                'Paired: ${_selectedDevice != null ? (_selectedDevice!.platformName.isNotEmpty ? _selectedDevice!.platformName : _selectedDevice!.remoteId.str) : "None"}',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   color: AppColors.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 12),
-              GradientButton(
-                label: 'CONNECT',
-                icon: Icons.bluetooth_connected,
-                onPressed: _selectedDevice != null && _scanReady
-                    ? () => context.pop()
-                    : null,
-              ),
+              _isConnecting
+                  ? const Center(child: CircularProgressIndicator())
+                  : GradientButton(
+                      label: 'CONNECT',
+                      icon: Icons.bluetooth_connected,
+                      onPressed: _selectedDevice != null ? _connect : null,
+                    ),
               const SizedBox(height: 12),
               Center(
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: _startScan,
                   child: Text(
-                    'Troubleshoot',
+                    'Scan again',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       color: AppColors.onSurfaceVariant,
@@ -314,6 +332,25 @@ class _ScannerSetupScreenState extends State<ScannerSetupScreen>
                   ),
                 ),
               ),
+              if (isConnected) ...[
+                const SizedBox(height: 4),
+                Center(
+                  child: TextButton(
+                    onPressed: () async {
+                      await BleService.instance.disconnect();
+                      if (mounted) setState(() {});
+                    },
+                    child: Text(
+                      'Disconnect',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.redAccent,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

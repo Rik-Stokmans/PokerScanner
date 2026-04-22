@@ -7,6 +7,7 @@ import '../models/invitation_model.dart';
 import '../models/friendship_model.dart';
 import '../models/deck_model.dart';
 import '../services/firestore_service.dart';
+import '../services/ble_service.dart';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,25 @@ final pendingFriendRequestsProvider = Provider<List<FriendshipModel>>((ref) {
   final user = ref.watch(currentUserProvider).value;
   if (user == null) return [];
   return friendships.where((f) => f.isPending(user.id)).toList();
+});
+
+// ─── BLE / Scanner ────────────────────────────────────────────────────────
+
+/// Live connection-state of the BLE scanner service.
+final bleConnectionStateProvider =
+    StreamProvider<BleConnectionState>((ref) {
+  return BleService.instance.connectionStateStream;
+});
+
+/// Whether the scanner is currently connected.
+final scannerConnectedProvider = Provider<bool>((ref) {
+  final stateAsync = ref.watch(bleConnectionStateProvider);
+  return stateAsync.value == BleConnectionState.connected;
+});
+
+/// Raw chip-scan hex ID strings from the scanner.
+final chipScanStreamProvider = StreamProvider<String>((ref) {
+  return BleService.instance.chipStream;
 });
 
 // ─── Decks ────────────────────────────────────────────────────────────────
