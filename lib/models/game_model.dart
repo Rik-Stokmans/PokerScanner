@@ -27,6 +27,7 @@ class GameModel {
   final int handCount;
   final DateTime createdAt;
   final Map<String, double> stacksAtHandStart; // uid → stack at start of current hand
+  final String? deckId; // references a DeckModel; null when no scanner deck is linked
 
   const GameModel({
     required this.id,
@@ -50,6 +51,7 @@ class GameModel {
     this.handCount = 0,
     required this.createdAt,
     this.stacksAtHandStart = const {},
+    this.deckId,
   });
 
   int get playerCount => playerIds.length;
@@ -87,6 +89,7 @@ class GameModel {
         'handCount': handCount,
         'createdAt': Timestamp.fromDate(createdAt),
         'stacksAtHandStart': stacksAtHandStart,
+        if (deckId != null) 'deckId': deckId,
       };
 
   factory GameModel.fromMap(String id, Map<String, dynamic> map) {
@@ -124,6 +127,7 @@ class GameModel {
       handCount: (map['handCount'] as num?)?.toInt() ?? 0,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       stacksAtHandStart: stacksAtHandStartRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      deckId: map['deckId'] as String?,
     );
   }
 }
