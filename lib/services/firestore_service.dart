@@ -3,6 +3,7 @@ import '../models/user_model.dart';
 import '../models/game_model.dart';
 import '../models/hand_model.dart';
 import '../models/card_model.dart';
+import '../models/deck_model.dart';
 import '../models/invitation_model.dart';
 import '../models/friendship_model.dart';
 import '../models/deck_model.dart';
@@ -10,6 +11,9 @@ import '../services/hand_evaluator.dart';
 
 class FirestoreService {
   static final _db = FirebaseFirestore.instance;
+
+  // Exposed for screens that need direct document reads
+  static FirebaseFirestore get db => _db;
 
   // ─── Users ───────────────────────────────────────────────────────────────
 

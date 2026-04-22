@@ -10,19 +10,6 @@ import 'card_model.dart';
 /// The [chipToCard] field is populated in-memory after loading the subcollection
 /// via [FirestoreService.getCardMappings] — it is NOT persisted in the top-level
 /// document.
-class DeckModel {
-  final String id;
-  final String ownerId;
-  final String name;
-
-  /// The id of the table/game this deck is currently assigned to, or null.
-  final String? assignedTableId;
-
-  final DateTime createdAt;
-
-  /// In-memory chip-ID → card-code lookup, e.g. "A3F2B1C0" → "As".
-  /// Populated after calling [FirestoreService.getCardMappings]; empty otherwise.
-  final Map<String, String> chipToCard;
 
   const DeckModel({
     required this.id,

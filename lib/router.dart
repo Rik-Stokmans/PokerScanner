@@ -12,6 +12,8 @@ import 'screens/game_history_screen.dart';
 import 'screens/session_analysis_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/learn_screen.dart';
+import 'screens/deck_management_screen.dart';
+import 'screens/deck_registration_screen.dart';
 import 'widgets/main_scaffold.dart';
 
 // Bridges Firebase auth state to go_router's refreshListenable
@@ -80,6 +82,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/friends',
         builder: (context, state) => const FriendsScreen(),
+      ),
+      GoRoute(
+        path: '/decks',
+        builder: (context, state) => const DeckManagementScreen(),
+      ),
+      GoRoute(
+        path: '/decks/register',
+        builder: (context, state) {
+          final deckId = state.uri.queryParameters['deckId'];
+          return DeckRegistrationScreen(deckId: deckId);
+        },
       ),
     ],
   );
