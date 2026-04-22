@@ -1,5 +1,5 @@
 ---
-description: Resolve all unchecked todos in TODOS.md via parallel sub-agents (one agent per cluster of related todos), then commit each group's changes to the main branch
+description: Resolve all unchecked todos in TODOS.md via parallel sub-agents (one agent per cluster of related todos), then commit each group's changes to the relevant repo(s)
 allowed-tools: Read, Write, Edit, Bash, Agent
 ---
 
@@ -9,9 +9,12 @@ Todo file: `/Users/rikstokmans/Claude/PokerScanner/TODOS.md`
 
 Repo map (absolute path → branch):
 
-| Short name    | Path                                         | Branch   |
-|---------------|----------------------------------------------|----------|
-| poker-scanner | /Users/rikstokmans/Claude/PokerScanner       | `master` |
+| Short name      | Path                                           | Branch   | Stack |
+|-----------------|------------------------------------------------|----------|-------|
+| poker-scanner   | /Users/rikstokmans/Claude/PokerScanner         | `master` | Flutter (Dart) |
+| poker-device    | /Users/rikstokmans/Claude/PokerScannerDevice   | `master` | Arduino C++ (ESP32-C3 + 2× MFRC522 RFID via SPI, NimBLE) |
+
+The device firmware lives in a single sketch file: `Poker_RFID_Reader.ino`.
 
 Failure policy: **skip-and-continue**. A single failing todo or group must never block the others. Report everything at the end.
 
@@ -21,7 +24,7 @@ Failure policy: **skip-and-continue**. A single failing todo or group must never
 
 ### 1. Pre-flight
 
-Run `git -C /Users/rikstokmans/Claude/PokerScanner status --porcelain`. If the repo is dirty, **stop immediately** and print the dirty files. Do not proceed — the coordinator will use worktrees and needs a stable base.
+For each repo in the map, run `git -C <path> status --porcelain`. If any repo is dirty, **stop immediately** and print the dirty files. Do not proceed — the coordinator will use worktrees and needs a stable base.
 
 ### 2. Parse todos
 
@@ -33,7 +36,7 @@ If there are zero unchecked todos, print "No todos to resolve." and stop.
 
 Look at the todo texts and decide which ones clearly belong together. Two todos belong in the same group when any of the following is true:
 
-- They describe work in the same screen, feature area, or widget.
+- They describe work in the same screen, feature area, widget, or firmware function.
 - They would likely edit the same files or the same function.
 - One is a prerequisite or sequel of the other.
 - They are phrased as variations of the same underlying problem.
@@ -44,9 +47,9 @@ Form groups and assign each a short id: `g1`, `g2`, … A group contains 1+ todo
 
 Before dispatching, print a one-line per-group summary so the user can see the plan:
 ```
-g1 [t1, t3]   → hand-ranking display
-g2 [t2]       → dark mode flash
-g3 [t4, t5]   → camera scanner + permissions
+g1 [t1, t3]   → hand-ranking display (poker-scanner)
+g2 [t2]       → BLE scan interval (poker-device)
+g3 [t4, t5]   → RFID power-down + battery reporting (poker-device)
 ```
 
 ### 4. Dispatch one sub-agent per GROUP, in parallel
@@ -78,44 +81,67 @@ Do **not** pass `run_in_background`. We want to block until all agents finish.
 
 ```
 You are resolving a GROUP of {{TODO_COUNT}} related todo(s) from the
-PokerScanner Flutter codebase. Other agents are resolving other groups
-in parallel — you must not touch their work or the shared repo checkout.
+PokerScanner codebase. Other agents are resolving other groups in
+parallel — you must not touch their work or the shared repo checkouts.
 
 Group id: {{GROUP_ID}}
 Todos in this group:
 
 {{TODOS_BLOCK}}
 
-Repo path and branch:
-  poker-scanner  /Users/rikstokmans/Claude/PokerScanner  master
+Repos and their branches:
+  poker-scanner  /Users/rikstokmans/Claude/PokerScanner        master  (Flutter/Dart)
+  poker-device   /Users/rikstokmans/Claude/PokerScannerDevice  master  (Arduino C++, ESP32-C3)
+
+The device firmware is a single sketch: Poker_RFID_Reader.ino
+Hardware: Seeed Studio XIAO ESP32-C3, 2× MFRC522 RFID readers on shared
+SPI (SCK=D8/GPIO8, MISO=D9/GPIO9, MOSI=D10/GPIO10), CS pins D2/D3,
+RST pins D4/D5. NimBLE for BLE. Battery sense on D0/GPIO0.
 
 Procedure:
 
-1. Explore the codebase enough to understand the relevant files and
-   context. Do not guess — read the code first.
+1. Decide which repo(s) the group requires changes in. Read the relevant
+   files first — do not guess.
 
-2. Create a private worktree so parallel agents never collide.
-   Work exclusively inside the worktree path:
+2. For each repo you will change, create a private worktree so parallel
+   agents never collide. Work exclusively inside the worktree path:
 
-       REPO=/Users/rikstokmans/Claude/PokerScanner
-       WT=/tmp/todo-{{GROUP_ID}}-poker-scanner
-       git -C "$REPO" worktree add "$WT" -b "todo/{{GROUP_ID}}" HEAD
+       REPO=<absolute repo path>
+       SHORT=<short name from the table>
+       WT=/tmp/todo-{{GROUP_ID}}-$SHORT
+       git -C "$REPO" worktree add "$WT" -b "todo/{{GROUP_ID}}-$SHORT" HEAD
 
    All edits and commits happen inside $WT. Never touch $REPO directly.
 
 3. Implement the change(s). Keep scope tight — solve only what the todos
    describe. No refactors, no drive-by fixes, no new abstractions.
 
-   If the todos are genuinely related (same files/feature), group them
-   into ONE cohesive commit. If a todo turns out to be unresolvable or
-   out of scope, skip it and note that in the result JSON (see step 6).
+   If a todo turns out to be unresolvable or out of scope, skip it and
+   note that in the result JSON (see step 6). Keep going on the others.
 
-4. Build the project inside the worktree to verify correctness:
+4. Verify correctness inside the worktree, based on the repo:
+
+   poker-scanner (Flutter):
        cd $WT && flutter analyze --no-fatal-infos
-   This must pass (exit 0). If it fails, try to fix. If still failing
-   after reasonable effort, do NOT commit.
+     Must exit 0. If it fails, try to fix. If still failing after
+     reasonable effort, do NOT commit for this repo.
 
-5. If the analysis is green, stage and commit inside the worktree:
+   poker-device (Arduino C++):
+     First check if arduino-cli is available:
+       which arduino-cli
+     If available, compile:
+       arduino-cli compile \
+         --fqbn esp32:esp32:XIAO_ESP32C3 \
+         --libraries "$WT" \
+         "$WT/Poker_RFID_Reader.ino"
+     If arduino-cli is NOT installed, do a best-effort static check
+     instead (look for obvious syntax errors, mismatched braces, use of
+     undefined variables) and note in the result JSON that full
+     compilation was skipped due to missing toolchain. This is acceptable
+     — do NOT block the commit solely because arduino-cli is absent.
+
+5. If verification passes (or is acceptably skipped for device firmware),
+   stage and commit inside the worktree:
        git -C "$WT" add <relevant files>
        git -C "$WT" commit -m "<short imperative sentence>"
    Commit message: one short imperative sentence that accurately covers
@@ -132,10 +158,10 @@ Procedure:
      "unresolved_todo_ids": ["t3"],
      "changes": [
        {
-         "repo_path": "/Users/rikstokmans/Claude/PokerScanner",
-         "short_name": "poker-scanner",
-         "worktree_path": "/tmp/todo-{{GROUP_ID}}-poker-scanner",
-         "branch": "todo/{{GROUP_ID}}",
+         "repo_path": "/Users/rikstokmans/Claude/<repo>",
+         "short_name": "poker-scanner|poker-device",
+         "worktree_path": "/tmp/todo-{{GROUP_ID}}-<short>",
+         "branch": "todo/{{GROUP_ID}}-<short>",
          "commit_sha": "<full sha>",
          "commit_message": "<your message>",
          "resolved_todo_ids": ["t1"]
@@ -144,13 +170,16 @@ Procedure:
    }
 
    Rules:
-   - `resolved_todo_ids` lists the todo ids that commit actually addresses.
+   - `resolved_todo_ids` on each change lists the todo ids that commit
+     actually addresses. A todo id may appear on multiple changes if it
+     spans both repos.
    - `unresolved_todo_ids` lists any todos you could NOT address. Empty
      array if you handled them all.
    - `status = "success"` iff every member todo is covered by at least
-     one change AND the repo committed cleanly.
+     one change AND every repo you intended to change committed cleanly.
    - `status = "partial"` iff at least one commit landed but something
-     else didn't — explain in `reason`.
+     else didn't — list only successfully-committed repos in `changes`
+     and explain in `reason`.
    - `status = "failed"` iff nothing could be committed. `changes: []`.
 
 7. Do NOT push. Do NOT edit TODOS.md. Do NOT remove worktrees. The
@@ -166,26 +195,24 @@ file path and a one-line outcome.
 
 After all agents return, read every `/tmp/todo-<group-id>-result.json` file. If a result file is missing for some group, treat every todo in that group as `failed` with reason `"agent did not produce a result file"`.
 
-### 6. Coordinator phase — cherry-pick into master (serial)
+### 6. Coordinator phase — cherry-pick into master (serial, one repo at a time)
 
-Flatten every successful/partial group's `changes` entries, ordered by the smallest `todo_id` in `resolved_todo_ids` (so `t1` changes land before `t5` changes).
-
-For each change:
+Flatten every successful/partial group's `changes` entries and group by `repo_path`. Within each repo, order by the smallest `todo_id` in `resolved_todo_ids` (so `t1` lands before `t5`). For each repo:
 
 1. In the **original** repo path:
    ```
-   git -C /Users/rikstokmans/Claude/PokerScanner cherry-pick <commit_sha>
+   git -C <repo-path> cherry-pick <commit_sha>
    ```
    If it fails:
    ```
-   git -C /Users/rikstokmans/Claude/PokerScanner cherry-pick --abort
+   git -C <repo-path> cherry-pick --abort
    ```
    Record every `todo_id` in that change's `resolved_todo_ids` as `"conflict"`, and continue.
 
-2. After all cherry-picks, clean up **all** worktrees (for every group):
+2. After all cherry-picks for all repos, clean up **all** worktrees (for every group, both repos):
    ```
-   git -C /Users/rikstokmans/Claude/PokerScanner worktree remove <worktree-path> --force
-   git -C /Users/rikstokmans/Claude/PokerScanner branch -D <branch>
+   git -C <repo-path> worktree remove <worktree-path> --force
+   git -C <repo-path> branch -D <branch>
    ```
    Ignore errors from branches/worktrees that don't exist.
 
@@ -194,7 +221,7 @@ For each change:
 Per-todo final state (derive from group results + cherry-pick outcomes):
 
 - **done**: the todo appears in `resolved_todo_ids` of at least one change, AND that change cherry-picked cleanly → flip `- [ ]` to `- [x]`.
-- **partial**: the todo was resolved by the agent but its change conflicted on cherry-pick → leave `- [ ]`, append an indented `> note: partial — cherry-pick conflict` line.
+- **partial**: the todo was resolved by the agent but its change conflicted on cherry-pick → leave `- [ ]`, append an indented `> note: partial — cherry-pick conflict in <repo>` line.
 - **unresolved**: the todo appears in the group's `unresolved_todo_ids` → leave `- [ ]`, append `> note: <reason from group>`.
 - **failed**: the group status is `failed`, or the group produced no result file → leave `- [ ]`, append `> note: <reason>`.
 
@@ -210,8 +237,8 @@ Print a concise report:
 
 ```
 Groups:
-  g1 [t1, t3]  → resolved, committed
-  g2 [t2]      → analyze-failed
+  g1 [t1, t3]  → resolved, committed (poker-scanner)
+  g2 [t2]      → resolved, committed (poker-device)
   g3 [t4, t5]  → t4 resolved, t5 unresolved (out of scope)
 
 Resolved todos:
