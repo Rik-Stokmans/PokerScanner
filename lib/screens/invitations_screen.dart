@@ -51,13 +51,51 @@ class InvitationsScreen extends ConsumerWidget {
                     child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 ),
-                error: (e, _) => Expanded(
-                  child: Center(
-                    child: Text('Error loading invitations',
-                        style: GoogleFonts.inter(
-                            color: AppColors.onSurfaceVariant)),
-                  ),
-                ),
+                error: (e, stack) {
+                  debugPrint('Error loading invitations: $e\n$stack');
+                  return Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 48,
+                              color: AppColors.onSurfaceVariant.withOpacity(0.6)),
+                          const SizedBox(height: 12),
+                          Text('Error loading invitations',
+                              style: GoogleFonts.manrope(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.onSurface,
+                              )),
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              e.toString(),
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextButton.icon(
+                            onPressed: () => ref.invalidate(invitationsProvider),
+                            icon: const Icon(Icons.refresh,
+                                color: AppColors.primary),
+                            label: Text('Retry',
+                                style: GoogleFonts.inter(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                )),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
                 data: (invitations) {
                   if (invitations.isEmpty) {
                     return Expanded(
@@ -126,18 +164,52 @@ class InvitationsScreen extends ConsumerWidget {
                                   final user =
                                       ref.read(currentUserProvider).value;
                                   if (user == null) return;
-                                  await FirestoreService.respondToInvitation(
-                                      inv.id, 'accepted', user.id);
-                                  if (context.mounted) {
-                                    context.go('/table');
+                                  try {
+                                    await FirestoreService.respondToInvitation(
+                                        inv.id, 'accepted', user.id);
+                                    if (context.mounted) {
+                                      context.go('/table');
+                                    }
+                                  } catch (e) {
+                                    debugPrint('Failed to accept invitation: $e');
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Failed to accept invitation: $e',
+                                            style: GoogleFonts.inter(
+                                                color: AppColors.onSurface),
+                                          ),
+                                          backgroundColor:
+                                              AppColors.surfaceContainerHigh,
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                                 onDecline: () async {
                                   final user =
                                       ref.read(currentUserProvider).value;
                                   if (user == null) return;
-                                  await FirestoreService.respondToInvitation(
-                                      inv.id, 'declined', user.id);
+                                  try {
+                                    await FirestoreService.respondToInvitation(
+                                        inv.id, 'declined', user.id);
+                                  } catch (e) {
+                                    debugPrint('Failed to decline invitation: $e');
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Failed to decline invitation: $e',
+                                            style: GoogleFonts.inter(
+                                                color: AppColors.onSurface),
+                                          ),
+                                          backgroundColor:
+                                              AppColors.surfaceContainerHigh,
+                                        ),
+                                      );
+                                    }
+                                  }
                                 },
                               );
                             },
