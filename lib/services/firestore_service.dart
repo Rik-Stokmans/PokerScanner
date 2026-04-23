@@ -522,24 +522,6 @@ class FirestoreService {
         'revealedPlayerIds': FieldValue.arrayUnion([playerId]),
       });
 
-  static Future<void> toggleFavoriteHand(
-      String gameId, String handId, String uid) async {
-    final ref = _db
-        .collection('games')
-        .doc(gameId)
-        .collection('hands')
-        .doc(handId);
-    final snap = await ref.get();
-    final data = snap.data();
-    if (data == null) return;
-    final current = (data['favoritedBy'] as List?)?.cast<String>() ?? [];
-    if (current.contains(uid)) {
-      await ref.update({'favoritedBy': FieldValue.arrayRemove([uid])});
-    } else {
-      await ref.update({'favoritedBy': FieldValue.arrayUnion([uid])});
-    }
-  }
-
   static Stream<List<HandModel>> getGameHandsStream(String gameId) => _db
       .collection('games')
       .doc(gameId)

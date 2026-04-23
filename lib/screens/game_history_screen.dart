@@ -666,12 +666,11 @@ class _ActionTimeline extends StatelessWidget {
   final List<HandActionModel> actions;
   const _ActionTimeline({required this.actions});
 
-  static const _roundOrder = ['preflop', 'flop', 'turn', 'river'];
   static const _roundLabels = {
-    'preflop': 'Pre-Flop',
-    'flop': 'Flop',
-    'turn': 'Turn',
-    'river': 'River',
+    BettingRound.preflop: 'Pre-Flop',
+    BettingRound.flop: 'Flop',
+    BettingRound.turn: 'Turn',
+    BettingRound.river: 'River',
   };
 
   Color _actionColor(ActionType type) {
@@ -680,11 +679,11 @@ class _ActionTimeline extends StatelessWidget {
         return const Color(0xFF757575); // grey[600]
       case ActionType.raise:
       case ActionType.allIn:
-      case ActionType.bet:
         return Colors.amber;
       case ActionType.call:
       case ActionType.check:
-      case ActionType.blind:
+      case ActionType.smallBlind:
+      case ActionType.bigBlind:
         return Colors.white70;
     }
   }
@@ -707,31 +706,25 @@ class _ActionTimeline extends StatelessWidget {
         return action.amount != null
             ? 'All-In \u20ac${action.amount!.toStringAsFixed(2)}'
             : 'All-In';
-      case ActionType.bet:
+      case ActionType.smallBlind:
         return action.amount != null
-            ? 'Bet \u20ac${action.amount!.toStringAsFixed(2)}'
-            : 'Bet';
-      case ActionType.blind:
+            ? 'Small Blind \u20ac${action.amount!.toStringAsFixed(2)}'
+            : 'Small Blind';
+      case ActionType.bigBlind:
         return action.amount != null
-            ? 'Blind \u20ac${action.amount!.toStringAsFixed(2)}'
-            : 'Blind';
+            ? 'Big Blind \u20ac${action.amount!.toStringAsFixed(2)}'
+            : 'Big Blind';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     // Group actions by betting round, preserving standard order
-    final grouped = <String, List<HandActionModel>>{};
-    for (final round in _roundOrder) {
+    final grouped = <BettingRound, List<HandActionModel>>{};
+    for (final round in BettingRound.values) {
       final roundActions = actions.where((a) => a.bettingRound == round).toList();
       if (roundActions.isNotEmpty) {
         grouped[round] = roundActions;
-      }
-    }
-    // Handle any non-standard rounds
-    for (final action in actions) {
-      if (!_roundOrder.contains(action.bettingRound)) {
-        grouped.putIfAbsent(action.bettingRound, () => []).add(action);
       }
     }
 
@@ -752,7 +745,7 @@ class _ActionTimeline extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 6, bottom: 4),
             child: Text(
-              _roundLabels[entry.key] ?? entry.key.toUpperCase(),
+              _roundLabels[entry.key] ?? entry.key.name.toUpperCase(),
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
