@@ -106,20 +106,54 @@ class _HandCard extends ConsumerStatefulWidget {
   ConsumerState<_HandCard> createState() => _HandCardState();
 }
 
-class _HandCardState extends ConsumerState<_HandCard> {
+class _HandCardState extends ConsumerState<_HandCard>
+    with SingleTickerProviderStateMixin {
   bool _expanded = false;
+  late AnimationController _heartController;
+  late Animation<double> _heartScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _heartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _heartScale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.4), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.4, end: 1.0), weight: 50),
+    ]).animate(CurvedAnimation(
+      parent: _heartController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _heartController.dispose();
+    super.dispose();
+  }
+
+  void _onHeartTap(String myUid) {
+    _heartController.forward(from: 0);
+    FirestoreService.toggleFavoriteHand(widget.hand.gameId, widget.hand.id, myUid);
+  }
 
   @override
   Widget build(BuildContext context) {
     final hand = widget.hand;
     final myUid = ref.watch(currentUserProvider).value?.id ?? '';
-    final myCards = hand.playerCards[myUid] ?? [];
-    final isPublished = hand.revealedPlayerIds.contains(myUid);
+    final myCards = widget.hand.playerCards[myUid] ?? [];
+    final isPublished = widget.hand.revealedPlayerIds.contains(myUid);
+    final isFavorited = widget.hand.favoritedBy.contains(myUid);
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(16),
+        border: isFavorited
+            ? Border.all(color: Colors.amber, width: 1.5)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +183,21 @@ class _HandCardState extends ConsumerState<_HandCard> {
                               style: GoogleFonts.inter(
                                 fontSize: 11, color: AppColors.onSurfaceVariant,
                               )),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 4),
+                          ScaleTransition(
+                            scale: _heartScale,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              icon: Icon(
+                                isFavorited ? Icons.favorite : Icons.favorite_border,
+                                size: 18,
+                                color: isFavorited ? Colors.amber : AppColors.onSurfaceVariant,
+                              ),
+                              onPressed: myUid.isNotEmpty ? () => _onHeartTap(myUid) : null,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
                           AnimatedRotation(
                             turns: _expanded ? 0.5 : 0.0,
                             duration: const Duration(milliseconds: 250),
