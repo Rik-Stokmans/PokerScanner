@@ -75,6 +75,11 @@ class SessionStats {
   final int showdownHands;
   final int nonShowdownWins;
   final int nonShowdownHands;
+  // g4: VPIP and leak warnings
+  final double vpip;
+  final List<String> leakWarnings;
+  // g5: stack trajectory series
+  final List<({int hand, double pnl})> stackSeries;
 
   const SessionStats({
     required this.pnl,
@@ -87,6 +92,9 @@ class SessionStats {
     this.showdownHands = 0,
     this.nonShowdownWins = 0,
     this.nonShowdownHands = 0,
+    this.vpip = 0,
+    this.leakWarnings = const [],
+    this.stackSeries = const [],
   });
 
   double get winRate => handsPlayed > 0 ? wins / handsPlayed : 0;
@@ -123,6 +131,32 @@ class SessionStats {
     final sign = bbPer100 >= 0 ? '+' : '';
     return '$sign${bbPer100.toStringAsFixed(1)}';
   }
+
+  // g4: VPIP formatted
+  String get vpipFormatted => '${(vpip * 100).toStringAsFixed(0)}%';
+
+  // g4: dynamic AI insight
+  String get aiInsight {
+    if (handsPlayed == 0) {
+      return 'Start a session to get personalised insights.';
+    }
+    if (leakWarnings.isNotEmpty) {
+      return 'Warning: ${leakWarnings.first} Focus on plugging leaks before increasing stakes.';
+    }
+    if (vpip > 0.30) {
+      return 'Your VPIP of $vpipFormatted is high. Tighten your pre-flop ranges — only play premium hands from early position.';
+    }
+    if (bbPer100 > 5) {
+      return 'Excellent session at $bbPer100Formatted bb/100. Your aggression and hand selection are paying off — stay disciplined.';
+    }
+    if (bbPer100 > 0) {
+      return 'Solid session at $bbPer100Formatted bb/100. Keep applying pressure in position and protect your big blind.';
+    }
+    if (bbPer100 < -10) {
+      return 'Tough session at $bbPer100Formatted bb/100. Review your pre-flop ranges and avoid calling large bets out of position.';
+    }
+    return 'You are running below EV. Review your pre-flop ranges and avoid calling out of position.';
+  }
 }
 
 final sessionAnalysisProvider = Provider<SessionStats>((ref) {
@@ -141,6 +175,7 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
       duration: Duration.zero,
       bbPer100: 0,
       positionalPnl: {},
+      stackSeries: [],
     );
   }
 
@@ -151,7 +186,11 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
   int nonShowdownWins = 0;
   int nonShowdownHands = 0;
 
-  for (final hand in hands) {
+  // g5: build stack series alongside the main loop
+  final stackSeries = <({int hand, double pnl})>[];
+
+  for (int i = 0; i < hands.length; i++) {
+    final hand = hands[i];
     final isWinner = hand.winnerId == user.id;
     final isShowdown = hand.wasShowdown;
 
@@ -161,6 +200,8 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
     } else {
       pnl -= game.bigBlind * 2;
     }
+
+    stackSeries.add((hand: i + 1, pnl: pnl));
 
     if (isShowdown) {
       showdownHands++;
@@ -188,6 +229,55 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
     positionalPnl[positions[i]] = posPnl;
   }
 
+  // g4: VPIP approximation
+  int vpipHands = 0;
+  for (final hand in hands) {
+    final stackBefore = hand.playerStacksBefore[user.id];
+    if (stackBefore != null && stackBefore > 0) {
+      vpipHands++;
+    }
+  }
+  final vpip = hands.isNotEmpty ? vpipHands / hands.length : 0.0;
+
+  // g4: Leak warnings
+  final leakWarnings = <String>[];
+
+  // Rule 1: Lost 4+ of the last 5 hands
+  final last5 = hands.length >= 5 ? hands.sublist(hands.length - 5) : hands;
+  final last5Losses = last5.where((h) => h.winnerId != user.id).length;
+  if (last5Losses >= 4) {
+    leakWarnings.add('Lost $last5Losses of the last ${last5.length} hands.');
+  }
+
+  // Rule 2: Won 0 showdowns in the last 8 showdown hands
+  final showdownHandsList = hands.where((h) => h.wasShowdown).toList();
+  final last8Showdowns = showdownHandsList.length >= 8
+      ? showdownHandsList.sublist(showdownHandsList.length - 8)
+      : showdownHandsList;
+  if (last8Showdowns.isNotEmpty) {
+    final recentShowdownWins =
+        last8Showdowns.where((h) => h.winnerId == user.id).length;
+    if (recentShowdownWins == 0) {
+      leakWarnings
+          .add('Won 0 showdowns in the last ${last8Showdowns.length} showdown hands.');
+    }
+  }
+
+  // Rule 3: Net loss from BB position exceeds 3× the big blind
+  final bbPositionIndex = positions.indexOf('BB');
+  double bbPosPnl = 0;
+  if (bbPositionIndex >= 0) {
+    final bbPosHands = hands.where(
+        (h) => h.handNumber % positions.length == bbPositionIndex);
+    for (final h in bbPosHands) {
+      bbPosPnl += h.winnerId == user.id ? h.potAmount : -(game.bigBlind * 2);
+    }
+  }
+  if (bbPosPnl < -(game.bigBlind * 3)) {
+    leakWarnings.add(
+        'Net loss from BB position exceeds 3× the big blind (${bbPosPnl.toStringAsFixed(0)}).');
+  }
+
   return SessionStats(
     pnl: pnl,
     handsPlayed: hands.length,
@@ -199,6 +289,9 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
     showdownHands: showdownHands,
     nonShowdownWins: nonShowdownWins,
     nonShowdownHands: nonShowdownHands,
+    vpip: vpip,
+    leakWarnings: leakWarnings,
+    stackSeries: stackSeries,
   );
 });
 
@@ -310,6 +403,10 @@ enum HistoryFilter { all, favorites, won, showdowns }
 final historyFilterProvider = StateProvider<HistoryFilter>(
   (_) => HistoryFilter.all,
 );
+
+/// When set, the history screen shows only hands with this handRank value.
+/// Null means no rank filter is active.
+final handRankFilterProvider = StateProvider<String?>((_) => null);
 
 /// Streams whether the current user has favorited the hand identified by
 /// [handId].  The hand document is expected to contain a `favoritedBy`
