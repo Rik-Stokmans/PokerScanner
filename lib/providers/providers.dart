@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
@@ -246,4 +247,39 @@ final activeDeckProvider = StreamProvider<DeckModel?>((ref) {
   final deckId = ref.watch(activeDeckIdProvider);
   if (deckId == null) return Stream.value(null);
   return FirestoreService.getDeckStream(deckId);
+});
+
+// ─── History ──────────────────────────────────────────────────────────────
+
+/// Filter options for the hand history screen.
+enum HistoryFilter { all, favorites, won, showdowns }
+
+/// Tracks the active filter on the hand history screen.
+final historyFilterProvider = StateProvider<HistoryFilter>(
+  (_) => HistoryFilter.all,
+);
+
+/// Streams whether the current user has favorited the hand identified by
+/// [handId].  The hand document is expected to contain a `favoritedBy`
+/// field that is a list of user IDs.
+final handFavoritesProvider =
+    StreamProvider.family<bool, String>((ref, handId) {
+  final userAsync = ref.watch(currentUserProvider);
+  final uid = userAsync.value?.id;
+  if (uid == null) return Stream.value(false);
+
+  // Locate the hand document by querying across all games.
+  // Hands are stored at games/{gameId}/hands/{handId}.
+  // We listen to the raw snapshot so we can read `favoritedBy` even
+  // if HandModel doesn't expose that field yet.
+  return FirebaseFirestore.instance
+      .collectionGroup('hands')
+      .where(FieldPath.documentId, isEqualTo: handId)
+      .snapshots()
+      .map((snap) {
+    if (snap.docs.isEmpty) return false;
+    final data = snap.docs.first.data();
+    final favoritedBy = (data['favoritedBy'] as List?)?.cast<String>() ?? [];
+    return favoritedBy.contains(uid);
+  });
 });
