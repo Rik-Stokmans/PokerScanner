@@ -7,6 +7,9 @@ import '../widgets/gradient_button.dart';
 import '../providers/providers.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../models/game_model.dart';
+import 'learn/session_xp_summary_sheet.dart';
+import '../services/learning_service.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
   const LobbyScreen({super.key});
@@ -23,10 +26,70 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     await FirestoreService.endGame(game.id, user.id);
   }
 
+  void _showXpSnackBar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Session ended — tap to claim your XP →'),
+        duration: const Duration(seconds: 8),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Claim',
+          onPressed: _openXpSheet,
+        ),
+      ),
+    );
+  }
+
+  void _openXpSheet() {
+    final user = ref.read(currentUserProvider).value;
+    if (user == null) {
+      context.go('/learn');
+      return;
+    }
+    // Build a default set of session XP events.
+    final defaultEvents = [
+      const XpEvent(reason: 'Completed a session', xp: 50),
+    ];
+    context.go('/learn');
+    // Show the sheet after navigation settles.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => SessionXpSummarySheet(
+          userId: user.id,
+          events: defaultEvents,
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
     final gameAsync = ref.watch(activeGameProvider);
+
+    // Detect active → completed transition and show XP prompt.
+    ref.listen<AsyncValue<GameModel?>>(activeGameProvider, (prev, next) {
+      final prevStatus = prev?.value?.status;
+      final nextStatus = next.value?.status;
+      if (prevStatus == GameStatus.active &&
+          nextStatus == GameStatus.completed) {
+        ref.read(showXpClaimProvider.notifier).state = true;
+      }
+    });
+
+    // Show SnackBar when showXpClaimProvider becomes true.
+    ref.listen<bool>(showXpClaimProvider, (_, show) {
+      if (show) {
+        ref.read(showXpClaimProvider.notifier).state = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showXpSnackBar();
+        });
+      }
+    });
 
     final user = userAsync.value;
     final game = gameAsync.value;
