@@ -70,6 +70,11 @@ class SessionStats {
   final Duration duration;
   final double bbPer100;
   final Map<String, double> positionalPnl;
+  final int wins;
+  final int showdownWins;
+  final int showdownHands;
+  final int nonShowdownWins;
+  final int nonShowdownHands;
 
   const SessionStats({
     required this.pnl,
@@ -77,7 +82,31 @@ class SessionStats {
     required this.duration,
     required this.bbPer100,
     required this.positionalPnl,
+    this.wins = 0,
+    this.showdownWins = 0,
+    this.showdownHands = 0,
+    this.nonShowdownWins = 0,
+    this.nonShowdownHands = 0,
   });
+
+  double get winRate => handsPlayed > 0 ? wins / handsPlayed : 0;
+  String get winRateFormatted =>
+      handsPlayed > 0 ? '${(winRate * 100).toStringAsFixed(1)}%' : '--';
+
+  double get showdownWinRate =>
+      showdownHands > 0 ? showdownWins / showdownHands : 0;
+  String get showdownWinRateFormatted =>
+      showdownHands > 0 ? '${(showdownWinRate * 100).toStringAsFixed(1)}%' : '--';
+
+  double get nonShowdownWinRate =>
+      nonShowdownHands > 0 ? nonShowdownWins / nonShowdownHands : 0;
+  String get nonShowdownWinRateFormatted =>
+      nonShowdownHands > 0 ? '${(nonShowdownWinRate * 100).toStringAsFixed(1)}%' : '--';
+
+  bool get nonShowdownWinRateHigh =>
+      nonShowdownHands > 0 && nonShowdownWinRate > 0.70;
+  bool get nonShowdownWinRateLow =>
+      nonShowdownHands > 0 && nonShowdownWinRate < 0.30;
 
   String get pnlFormatted {
     final sign = pnl >= 0 ? '+' : '';
@@ -116,11 +145,29 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
   }
 
   double pnl = 0;
+  int wins = 0;
+  int showdownWins = 0;
+  int showdownHands = 0;
+  int nonShowdownWins = 0;
+  int nonShowdownHands = 0;
+
   for (final hand in hands) {
-    if (hand.winnerId == user.id) {
+    final isWinner = hand.winnerId == user.id;
+    final isShowdown = hand.wasShowdown;
+
+    if (isWinner) {
       pnl += hand.potAmount;
+      wins++;
     } else {
       pnl -= game.bigBlind * 2;
+    }
+
+    if (isShowdown) {
+      showdownHands++;
+      if (isWinner) showdownWins++;
+    } else {
+      nonShowdownHands++;
+      if (isWinner) nonShowdownWins++;
     }
   }
 
@@ -147,6 +194,11 @@ final sessionAnalysisProvider = Provider<SessionStats>((ref) {
     duration: duration,
     bbPer100: bbPer100,
     positionalPnl: positionalPnl,
+    wins: wins,
+    showdownWins: showdownWins,
+    showdownHands: showdownHands,
+    nonShowdownWins: nonShowdownWins,
+    nonShowdownHands: nonShowdownHands,
   );
 });
 

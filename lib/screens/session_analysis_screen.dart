@@ -88,11 +88,25 @@ class SessionAnalysisScreen extends ConsumerWidget {
                               ? AppColors.primary
                               : AppColors.error,
                         ),
+                        const SizedBox(width: 20),
+                        _MiniStat(
+                          label: 'Win %',
+                          value: stats.winRateFormatted,
+                          valueColor: stats.handsPlayed > 0
+                              ? (stats.winRate >= 0.5
+                                  ? AppColors.primary
+                                  : AppColors.error)
+                              : null,
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // Win Breakdown card
+              _WinBreakdownCard(stats: stats),
               const SizedBox(height: 24),
 
               // Stack over time sparkline (t22)
@@ -359,6 +373,139 @@ class _ErrorCard extends StatelessWidget {
               style: GoogleFonts.manrope(
                 fontSize: 13, fontWeight: FontWeight.w700,
                 color: isWin ? AppColors.primary : AppColors.error,
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _WinBreakdownCard extends StatelessWidget {
+  final SessionStats stats;
+
+  const _WinBreakdownCard({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final flagColor = stats.nonShowdownWinRateHigh
+        ? AppColors.primary
+        : stats.nonShowdownWinRateLow
+            ? AppColors.error
+            : null;
+    final flagText = stats.nonShowdownWinRateHigh
+        ? 'High non-showdown win rate — strong aggression or bluffing'
+        : stats.nonShowdownWinRateLow
+            ? 'Low non-showdown win rate — consider more selective aggression'
+            : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Win Breakdown',
+            style: GoogleFonts.manrope(
+              fontSize: 18, fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            )),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _WinBreakdownTile(
+                      label: 'Showdown',
+                      winRate: stats.showdownWinRateFormatted,
+                      detail: '${stats.showdownWins}/${stats.showdownHands}',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _WinBreakdownTile(
+                      label: 'Non-Showdown',
+                      winRate: stats.nonShowdownWinRateFormatted,
+                      detail: '${stats.nonShowdownWins}/${stats.nonShowdownHands}',
+                      flagColor: flagColor,
+                    ),
+                  ),
+                ],
+              ),
+              if (flagText != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: flagColor),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(flagText,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: flagColor,
+                            height: 1.4,
+                          )),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WinBreakdownTile extends StatelessWidget {
+  final String label;
+  final String winRate;
+  final String detail;
+  final Color? flagColor;
+
+  const _WinBreakdownTile({
+    required this.label,
+    required this.winRate,
+    required this.detail,
+    this.flagColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: flagColor != null
+            ? Border.all(color: flagColor!.withOpacity(0.4))
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                color: AppColors.onSurfaceVariant,
+                letterSpacing: 0.5,
+              )),
+          const SizedBox(height: 4),
+          Text(winRate,
+              style: GoogleFonts.manrope(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: flagColor ?? AppColors.onSurface,
+              )),
+          const SizedBox(height: 2),
+          Text(detail,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                color: AppColors.onSurfaceVariant,
               )),
         ],
       ),
