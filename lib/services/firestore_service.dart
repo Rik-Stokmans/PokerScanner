@@ -379,11 +379,14 @@ class FirestoreService {
       }.toList(),
       playerStacksBefore: game.stacksAtHandStart,
     );
-    await _db
+    final handRef = await _db
         .collection('games')
         .doc(gameId)
         .collection('hands')
         .add(hand.toMap());
+
+    // Persist win condition description on the hand document
+    await setHandWinCondition(gameId, handRef.id, result.description);
 
     // Update winner stats (use set+merge so the doc is created if it doesn't exist yet)
     await _db.collection('users').doc(winnerId).set({
@@ -394,6 +397,36 @@ class FirestoreService {
     // Do NOT auto-start the next hand — the host manually triggers startNewHandForScanner
     // so players have time to optionally show their cards first.
   }
+
+  /// Toggle [uid] in the `favoritedBy` array of a hand document.
+  ///
+  /// If [uid] is already in the array it is removed; otherwise it is added.
+  static Future<void> toggleFavoriteHand(
+      String gameId, String handId, String uid) async {
+    final ref = _db
+        .collection('games')
+        .doc(gameId)
+        .collection('hands')
+        .doc(handId);
+    final snap = await ref.get();
+    final favoritedBy =
+        List<String>.from((snap.data()?['favoritedBy'] as List?) ?? []);
+    if (favoritedBy.contains(uid)) {
+      await ref.update({'favoritedBy': FieldValue.arrayRemove([uid])});
+    } else {
+      await ref.update({'favoritedBy': FieldValue.arrayUnion([uid])});
+    }
+  }
+
+  /// Write the [condition] string as the `winCondition` field on a hand document.
+  static Future<void> setHandWinCondition(
+          String gameId, String handId, String condition) =>
+      _db
+          .collection('games')
+          .doc(gameId)
+          .collection('hands')
+          .doc(handId)
+          .update({'winCondition': condition});
 
   static Future<void> endGame(String gameId, String hostId) async {
     // Clear the deck's table assignment if one was linked
