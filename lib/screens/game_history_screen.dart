@@ -74,6 +74,31 @@ class GameHistoryScreen extends ConsumerWidget {
                     fontSize: 13, color: AppColors.onSurfaceVariant,
                     letterSpacing: 0.5,
                   )),
+              const SizedBox(height: 16),
+              handsAsync.when(
+                loading: () => const _StatsRow(
+                  totalHands: 0,
+                  netGain: 0,
+                  biggestPot: 0,
+                ),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (hands) {
+                  final totalHands = hands.length;
+                  final netGain = hands.fold<double>(
+                    0,
+                    (sum, h) => h.winnerId == myUid ? sum + h.potAmount : sum,
+                  );
+                  final biggestPot = hands.fold<double>(
+                    0,
+                    (max, h) => h.potAmount > max ? h.potAmount : max,
+                  );
+                  return _StatsRow(
+                    totalHands: totalHands,
+                    netGain: netGain,
+                    biggestPot: biggestPot,
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               SizedBox(
                 height: 36,
@@ -161,6 +186,89 @@ class GameHistoryScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _StatsRow extends StatelessWidget {
+  final int totalHands;
+  final double netGain;
+  final double biggestPot;
+
+  const _StatsRow({
+    required this.totalHands,
+    required this.netGain,
+    required this.biggestPot,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final netSign = netGain >= 0 ? '+' : '';
+    return Row(
+      children: [
+        Expanded(
+          child: _StatTile(
+            label: 'Hands',
+            value: '$totalHands',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatTile(
+            label: 'Net Gain',
+            value: '$netSign€${netGain.toStringAsFixed(2)}',
+            valueColor: netGain >= 0 ? AppColors.primary : const Color(0xFFE57373),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatTile(
+            label: 'Biggest Pot',
+            value: '€${biggestPot.toStringAsFixed(2)}',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _StatTile({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(value,
+              style: GoogleFonts.manrope(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: valueColor ?? AppColors.onSurface,
+              )),
+          const SizedBox(height: 2),
+          Text(label,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: AppColors.onSurfaceVariant,
+                letterSpacing: 0.3,
+              )),
+        ],
       ),
     );
   }
