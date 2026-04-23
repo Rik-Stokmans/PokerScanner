@@ -11,9 +11,35 @@ import '../services/firestore_service.dart';
 class GameHistoryScreen extends ConsumerWidget {
   const GameHistoryScreen({super.key});
 
+  List<HandModel> _applyFilter(
+      List<HandModel> hands, HistoryFilter filter, String myUid) {
+    switch (filter) {
+      case HistoryFilter.all:
+        return hands;
+      case HistoryFilter.favorites:
+        // favoritedBy is not yet on HandModel — return empty until added
+        return hands
+            .where((h) => (h.favoritedBy ?? const <String>[]).contains(myUid))
+            .toList();
+      case HistoryFilter.won:
+        return hands.where((h) => h.winnerId == myUid).toList();
+      case HistoryFilter.showdowns:
+        return hands.where((h) => h.wasShowdown).toList();
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final handsAsync = ref.watch(activeGameHandsProvider);
+    final activeFilter = ref.watch(historyFilterProvider);
+    final myUid = ref.watch(currentUserProvider).value?.id ?? '';
+
+    const filterLabels = {
+      HistoryFilter.all: 'All',
+      HistoryFilter.favorites: 'Favorites',
+      HistoryFilter.won: 'My Wins',
+      HistoryFilter.showdowns: 'Showdowns',
+    };
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -48,7 +74,40 @@ class GameHistoryScreen extends ConsumerWidget {
                     fontSize: 13, color: AppColors.onSurfaceVariant,
                     letterSpacing: 0.5,
                   )),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 36,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: HistoryFilter.values.map((filter) {
+                      final isSelected = filter == activeFilter;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(filterLabels[filter]!),
+                          selected: isSelected,
+                          onSelected: (_) => ref
+                              .read(historyFilterProvider.notifier)
+                              .state = filter,
+                          labelStyle: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? AppColors.surface
+                                : AppColors.onSurfaceVariant,
+                          ),
+                          selectedColor: AppColors.primary,
+                          backgroundColor: AppColors.surfaceContainerHigh,
+                          side: BorderSide.none,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               Expanded(
                 child: handsAsync.when(
                   loading: () => const Center(
@@ -58,7 +117,8 @@ class GameHistoryScreen extends ConsumerWidget {
                     child: Text('Error loading history',
                         style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
                   ),
-                  data: (hands) {
+                  data: (allHands) {
+                    final hands = _applyFilter(allHands, activeFilter, myUid);
                     if (hands.isEmpty) {
                       return Center(
                         child: Column(
@@ -67,17 +127,25 @@ class GameHistoryScreen extends ConsumerWidget {
                             Icon(Icons.history, size: 48,
                                 color: AppColors.onSurfaceVariant.withOpacity(0.4)),
                             const SizedBox(height: 12),
-                            Text('No hands played yet',
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  color: AppColors.onSurfaceVariant,
-                                )),
+                            Text(
+                              allHands.isEmpty
+                                  ? 'No hands played yet'
+                                  : 'No hands match this filter',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
                             const SizedBox(height: 6),
-                            Text('Start a session to record hand history',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.onSurfaceVariant.withOpacity(0.6),
-                                )),
+                            Text(
+                              allHands.isEmpty
+                                  ? 'Start a session to record hand history'
+                                  : 'Try a different filter',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant.withOpacity(0.6),
+                              ),
+                            ),
                           ],
                         ),
                       );
