@@ -54,7 +54,7 @@ class _GameHistoryScreenState extends ConsumerState<GameHistoryScreen> {
       final board = h.communityCards.map((c) => c.display).join(' ');
       buf.writeln('${h.handNumber},${h.winnerUsername},${h.potAmount.toStringAsFixed(2)},${h.handRank},$board,${h.timestamp.toIso8601String()}');
     }
-    Share.share(buf.toString(), subject: 'Poker Hand History');
+    SharePlus.instance.share(ShareParams(text: buf.toString(), subject: 'Poker Hand History'));
   }
 
   List<HandModel> _filterHands(List<HandModel> hands) {
@@ -657,7 +657,7 @@ class _ExpandedSection extends StatelessWidget {
               // Share button
               const SizedBox(height: 12),
               GestureDetector(
-                onTap: () => Share.share(_buildShareText()),
+                onTap: () => SharePlus.instance.share(ShareParams(text: _buildShareText(), subject: 'Poker Hand')),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
