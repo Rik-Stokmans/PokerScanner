@@ -27,6 +27,7 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
   BluetoothDevice? _selectedDevice;
   bool _isConnecting = false;
   String? _error;
+  String? _connectedDeviceName;
 
   StreamSubscription<BluetoothDevice>? _scanSub;
 
@@ -41,7 +42,21 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    _startScan();
+    // Only auto-scan if not already connected.
+    // When already connected we just show the connected state — scanning
+    // would broadcast BleConnectionState.scanning and break the lobby badge.
+    if (BleService.instance.state == BleConnectionState.connected) {
+      _loadConnectedDeviceName();
+    } else {
+      _startScan();
+    }
+  }
+
+  Future<void> _loadConnectedDeviceName() async {
+    final name = await BleService.instance.getLastPairedDeviceName();
+    if (mounted) {
+      setState(() => _connectedDeviceName = name ?? 'RFID Scanner');
+    }
   }
 
   void _startScan() {
@@ -50,6 +65,7 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
       _devices.clear();
       _selectedDevice = null;
       _error = null;
+      _connectedDeviceName = null;
     });
 
     _scanSub = BleService.instance
@@ -133,7 +149,7 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
               ),
               const SizedBox(height: 36),
               Text(
-                'Pair your scanner',
+                isConnected ? 'Scanner connected' : 'Pair your scanner',
                 style: GoogleFonts.manrope(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
@@ -142,7 +158,9 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'Pair your secure hand scanner to begin dealing at the silent table.',
+                isConnected
+                    ? 'Your hand scanner is active and ready to deal.'
+                    : 'Pair your secure hand scanner to begin dealing at the silent table.',
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   color: AppColors.onSurfaceVariant,
@@ -162,7 +180,9 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                           height: 100 * _pulseAnimation.value,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.primary
+                            color: (isConnected
+                                    ? AppColors.primary
+                                    : AppColors.primary)
                                 .withOpacity(0.05 * _pulseAnimation.value),
                           ),
                         ),
@@ -173,8 +193,10 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                             shape: BoxShape.circle,
                             color: AppColors.surfaceContainerHighest,
                           ),
-                          child: const Icon(
-                            Icons.bluetooth_searching,
+                          child: Icon(
+                            isConnected
+                                ? Icons.bluetooth_connected
+                                : Icons.bluetooth_searching,
                             color: AppColors.primary,
                             size: 36,
                           ),
@@ -187,12 +209,16 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
               const SizedBox(height: 12),
               Center(
                 child: Text(
-                  _devices.isEmpty
-                      ? 'Searching...'
-                      : '${_devices.length} device(s) found',
+                  isConnected
+                      ? 'Connected to ${_connectedDeviceName ?? 'RFID Scanner'}'
+                      : _devices.isEmpty
+                          ? 'Searching...'
+                          : '${_devices.length} device(s) found',
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: AppColors.onSurfaceVariant,
+                    color: isConnected
+                        ? AppColors.primary
+                        : AppColors.onSurfaceVariant,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -210,120 +236,124 @@ class _ScannerSetupScreenState extends ConsumerState<ScannerSetupScreen>
                   ),
                 ),
               ],
-              const SizedBox(height: 32),
-              Text(
-                'Available Devices',
-                style: GoogleFonts.manrope(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+              if (!isConnected) ...[
+                const SizedBox(height: 32),
+                Text(
+                  'Available Devices',
+                  style: GoogleFonts.manrope(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: _devices.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No RFID scanners found nearby.',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: _devices.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final device = _devices[index];
-                          final isSelected =
-                              _selectedDevice?.remoteId == device.remoteId;
-                          final name = device.platformName.isNotEmpty
-                              ? device.platformName
-                              : 'RFID Scanner';
-
-                          return GestureDetector(
-                            onTap: () =>
-                                setState(() => _selectedDevice = device),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppColors.primary.withOpacity(0.08)
-                                    : AppColors.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(14),
-                                border: isSelected
-                                    ? Border.all(
-                                        color: AppColors.primary
-                                            .withOpacity(0.4))
-                                    : null,
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.bluetooth,
-                                    color: AppColors.primary,
-                                    size: 22,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.onSurface,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          device.remoteId.str,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            color:
-                                                AppColors.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (isSelected)
-                                    const Icon(Icons.check_circle,
-                                        color: AppColors.primary, size: 20),
-                                ],
-                              ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _devices.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No RFID scanners found nearby.',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: AppColors.onSurfaceVariant,
                             ),
-                          );
-                        },
-                      ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Paired: ${_selectedDevice != null ? (_selectedDevice!.platformName.isNotEmpty ? _selectedDevice!.platformName : _selectedDevice!.remoteId.str) : "None"}',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: _devices.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final device = _devices[index];
+                            final isSelected =
+                                _selectedDevice?.remoteId == device.remoteId;
+                            final name = device.platformName.isNotEmpty
+                                ? device.platformName
+                                : 'RFID Scanner';
+
+                            return GestureDetector(
+                              onTap: () =>
+                                  setState(() => _selectedDevice = device),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppColors.primary.withOpacity(0.08)
+                                      : AppColors.surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: isSelected
+                                      ? Border.all(
+                                          color: AppColors.primary
+                                              .withOpacity(0.4))
+                                      : null,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.bluetooth,
+                                      color: AppColors.primary,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.onSurface,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            device.remoteId.str,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              color:
+                                                  AppColors.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      const Icon(Icons.check_circle,
+                                          color: AppColors.primary, size: 20),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _isConnecting
-                  ? const Center(child: CircularProgressIndicator())
-                  : GradientButton(
-                      label: 'CONNECT',
-                      icon: Icons.bluetooth_connected,
-                      onPressed: _selectedDevice != null ? _connect : null,
-                    ),
+                const SizedBox(height: 8),
+                Text(
+                  'Paired: ${_selectedDevice != null ? (_selectedDevice!.platformName.isNotEmpty ? _selectedDevice!.platformName : _selectedDevice!.remoteId.str) : "None"}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _isConnecting
+                    ? const Center(child: CircularProgressIndicator())
+                    : GradientButton(
+                        label: 'CONNECT',
+                        icon: Icons.bluetooth_connected,
+                        onPressed: _selectedDevice != null ? _connect : null,
+                      ),
+              ] else ...[
+                const Spacer(),
+              ],
               const SizedBox(height: 12),
               Center(
                 child: TextButton(
                   onPressed: _startScan,
                   child: Text(
-                    'Scan again',
+                    isConnected ? 'Scan for a different device' : 'Scan again',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       color: AppColors.onSurfaceVariant,
