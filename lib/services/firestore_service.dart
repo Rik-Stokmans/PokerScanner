@@ -532,11 +532,14 @@ class FirestoreService {
           .collection('invitations')
           .where('toUserId', isEqualTo: userId)
           .where('status', isEqualTo: 'pending')
-          .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((s) => s.docs
-              .map((d) => InvitationModel.fromMap(d.id, d.data()))
-              .toList());
+          .map((s) {
+            final invitations = s.docs
+                .map((d) => InvitationModel.fromMap(d.id, d.data()))
+                .toList();
+            invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return invitations;
+          });
 
   static Future<void> sendInvitation({
     required String fromUserId,
