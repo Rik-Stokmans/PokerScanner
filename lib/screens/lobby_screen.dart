@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../widgets/scanner_status_badge.dart';
 import '../widgets/gradient_button.dart';
 import '../providers/providers.dart';
 import '../services/firestore_service.dart';
@@ -55,7 +54,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const ScannerStatusBadge(),
                     ],
                   ),
                   Row(

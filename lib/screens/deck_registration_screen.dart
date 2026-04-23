@@ -7,7 +7,6 @@ import '../providers/providers.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_button.dart';
-import '../widgets/scanner_status_badge.dart';
 
 // All 52 cards in registration order (suit by suit)
 final _registrationOrder = CardModel.fullDeck;
@@ -176,7 +175,6 @@ class _DeckRegistrationScreenState
                 letterSpacing: 2,
               ),
             ),
-            ScannerStatusBadge(isActive: _scannerConnected),
           ],
         ),
       ],

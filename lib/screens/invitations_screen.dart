@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../widgets/scanner_status_badge.dart';
 import '../providers/providers.dart';
 import '../services/firestore_service.dart';
 import '../models/invitation_model.dart';
@@ -39,7 +38,6 @@ class InvitationsScreen extends ConsumerWidget {
                             fontSize: 22, fontWeight: FontWeight.w800,
                             color: AppColors.onSurface, letterSpacing: 2,
                           )),
-                      const ScannerStatusBadge(),
                     ],
                   ),
                 ],

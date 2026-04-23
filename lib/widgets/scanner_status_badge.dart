@@ -69,15 +69,6 @@ class _BatteryIndicator extends StatelessWidget {
 
   const _BatteryIndicator({required this.percentage});
 
-  IconData get _icon {
-    if (percentage >= 90) return Icons.battery_full;
-    if (percentage >= 70) return Icons.battery_5_bar;
-    if (percentage >= 50) return Icons.battery_4_bar;
-    if (percentage >= 30) return Icons.battery_3_bar;
-    if (percentage >= 15) return Icons.battery_2_bar;
-    return Icons.battery_1_bar;
-  }
-
   Color get _color {
     if (percentage >= 30) return AppColors.primary;
     if (percentage >= 15) return AppColors.tertiary;
@@ -86,21 +77,105 @@ class _BatteryIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(_icon, size: 16, color: _color),
-        const SizedBox(width: 2),
-        Text(
-          '$percentage%',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: _color,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ],
+    return CustomPaint(
+      size: const Size(28, 14),
+      painter: _BatteryPainter(percentage: percentage, fillColor: _color),
     );
   }
+}
+
+class _BatteryPainter extends CustomPainter {
+  final int percentage;
+  final Color fillColor;
+
+  const _BatteryPainter({required this.percentage, required this.fillColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double nubWidth = 2.5;
+    const double nubHeight = 6.0;
+    const double bodyRadius = 3.5;
+    const double borderWidth = 1.2;
+    const double innerPadding = 1.5;
+
+    final double bodyWidth = size.width - nubWidth;
+    final double bodyHeight = size.height;
+
+    // Battery outline
+    final outlinePaint = Paint()
+      ..color = fillColor.withValues(alpha: 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = borderWidth;
+
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, bodyWidth, bodyHeight),
+      const Radius.circular(bodyRadius),
+    );
+    canvas.drawRRect(bodyRect, outlinePaint);
+
+    // Nub (positive terminal) on the right
+    final nubPaint = Paint()
+      ..color = fillColor.withValues(alpha: 0.7)
+      ..style = PaintingStyle.fill;
+
+    final nubTop = (bodyHeight - nubHeight) / 2;
+    final nubRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(bodyWidth, nubTop, nubWidth, nubHeight),
+      const Radius.circular(1.0),
+    );
+    canvas.drawRRect(nubRect, nubPaint);
+
+    // Fill level inside the body
+    final fillFraction = (percentage / 100).clamp(0.0, 1.0);
+    const innerLeft = borderWidth + innerPadding;
+    const innerTop = borderWidth + innerPadding;
+    final innerRight = bodyWidth - borderWidth - innerPadding;
+    final innerBottom = bodyHeight - borderWidth - innerPadding;
+    final innerWidth = innerRight - innerLeft;
+    final innerHeight = innerBottom - innerTop;
+
+    if (fillFraction > 0) {
+      const fillRadius = bodyRadius - borderWidth - innerPadding * 0.5;
+      final fillPaint = Paint()
+        ..color = fillColor
+        ..style = PaintingStyle.fill;
+
+      final fillRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          innerLeft,
+          innerTop,
+          innerWidth * fillFraction,
+          innerHeight,
+        ),
+        Radius.circular(fillRadius.clamp(0.0, double.infinity)),
+      );
+      canvas.drawRRect(fillRect, fillPaint);
+    }
+
+    // Percentage text centered in body
+    final textColor = percentage > 20 ? Colors.black : fillColor;
+    final textSpan = TextSpan(
+      text: '$percentage',
+      style: TextStyle(
+        color: textColor,
+        fontSize: 8.0,
+        fontWeight: FontWeight.w700,
+        height: 1.0,
+      ),
+    );
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final textOffset = Offset(
+      (bodyWidth - textPainter.width) / 2,
+      (bodyHeight - textPainter.height) / 2,
+    );
+    textPainter.paint(canvas, textOffset);
+  }
+
+  @override
+  bool shouldRepaint(_BatteryPainter old) =>
+      old.percentage != percentage || old.fillColor != fillColor;
 }

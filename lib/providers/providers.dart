@@ -192,9 +192,12 @@ final pendingFriendRequestsProvider = Provider<List<FriendshipModel>>((ref) {
 // ─── BLE / Scanner ────────────────────────────────────────────────────────
 
 /// Live connection-state of the BLE scanner service.
+/// Emits the current state immediately so consumers that start listening
+/// after auto-reconnect completes still get the correct initial value.
 final bleConnectionStateProvider =
-    StreamProvider<BleConnectionState>((ref) {
-  return BleService.instance.connectionStateStream;
+    StreamProvider<BleConnectionState>((ref) async* {
+  yield BleService.instance.state;
+  yield* BleService.instance.connectionStateStream;
 });
 
 /// Whether the scanner is currently connected.
@@ -204,8 +207,12 @@ final scannerConnectedProvider = Provider<bool>((ref) {
 });
 
 /// Parsed battery percentage (0–100) from the scanner.
-final scannerBatteryProvider = StreamProvider<int>((ref) {
-  return BleService.instance.batteryStream;
+/// Emits the cached level immediately if one was already received before
+/// this provider started listening (e.g. after auto-reconnect on startup).
+final scannerBatteryProvider = StreamProvider<int>((ref) async* {
+  final cached = BleService.instance.batteryLevel;
+  if (cached != null) yield cached;
+  yield* BleService.instance.batteryStream;
 });
 
 /// Raw chip-scan hex ID strings from the scanner.

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../widgets/scanner_status_badge.dart';
 import '../providers/providers.dart';
 import '../models/hand_model.dart';
 import '../models/card_model.dart';
@@ -34,7 +33,6 @@ class GameHistoryScreen extends ConsumerWidget {
                             fontSize: 26, fontWeight: FontWeight.w800,
                             color: AppColors.onSurface, letterSpacing: 3,
                           )),
-                      const ScannerStatusBadge(),
                     ],
                   ),
                   IconButton(

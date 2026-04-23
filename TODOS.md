@@ -31,3 +31,71 @@ flutter: Error loading invitations: [cloud_firestore/failed-precondition] The qu
 flutter: #0      EventChannelExtension.receiveGuardedBroadcastStream (package:_flutterfire_internals/src/exception.dart:67:43)
 flutter: #1      MethodChannelQuery.snapshots.<anonymous closure> (package:cloud_firestore_platform_interface/src/method_channel/method_channel_query.dart:183:18)
 - [x] the your hand section in the table tab should be more centered and i would like it to look more like the design i added here (i like the action layour in the bottom so keep that the same although make sure they are sticky to the bottom because there is a lot of empty space below the buttons now). design: /Users/rikstokmans/Claude/PokerScanner/stitch_poker_scanner
+
+---
+
+## History Page Overhaul
+
+### Data model
+
+- [ ] **Create `HandActionModel`** — a new model at `lib/models/hand_action_model.dart` with fields: `playerId`, `playerName`, `actionType` (enum: fold, call, raise, check, allIn, smallBlind, bigBlind), `amount` (nullable double), `bettingRound` (preflop/flop/turn/river), `timestamp`. Serialize/deserialize with `toMap` / `fromMap`.
+
+- [ ] **Add `actions` field to `HandModel`** — embed a `List<HandActionModel>` in `HandModel`. Update `toMap`, `fromMap`, and the constructor. Existing hands without actions will default to an empty list.
+
+- [ ] **Add `favoritedBy` field to `HandModel`** — a `List<String>` of user IDs who hearted this hand. Default empty. Update `toMap` and `fromMap`.
+
+- [ ] **Add `handDurationSeconds` field to `HandModel`** — an `int?` representing how long the hand took in seconds (derived from first action to resolution). Update `toMap` and `fromMap`.
+
+- [ ] **Add `winCondition` field to `HandModel`** — a `String` enum value: `'showdown'`, `'everyone_folded'`, or `'uncontested'` (only one player). Update `toMap`, `fromMap`.
+
+### Firestore / service layer
+
+- [ ] **Record actions in `FirestoreService`** — whenever `playerBet`, `playerFold`, `playerCheck`, or blinds are posted, append a `HandActionModel` to a running action log on the active game document (e.g. `currentHandActions` list). On hand resolution copy that list into the archived `HandModel` and clear it from the game document.
+
+- [ ] **Add `FirestoreService.toggleFavoriteHand(gameId, handId, uid)`** — toggle the user's UID in the `favoritedBy` array using Firestore `arrayUnion` / `arrayRemove`.
+
+- [ ] **Add `FirestoreService.setHandWinCondition(gameId, handId, condition)`** — write the `winCondition` string when resolving a hand (call from `_resolveHand`).
+
+### Providers
+
+- [ ] **Add `handFavoritesProvider(handId)`** — a `StreamProvider` that streams whether the current user has favorited a specific hand (derived from `favoritedBy` field).
+
+- [ ] **Add `historyFilterProvider`** — a `StateProvider<HistoryFilter>` for tracking the active filter (all, favorites, won, showdowns).
+
+### UI — hand card expansion
+
+- [ ] **Make `_HandCard` expandable** — convert it to an `ExpansionTile`-style widget with a smooth expand/collapse animation. The collapsed view keeps the existing summary (hand number, winner, pot, cards). The expanded view shows the action log and win condition.
+
+- [ ] **Action timeline in expanded section** — list each `HandActionModel` in chronological order, grouped by betting round (Pre-Flop / Flop / Turn / River as section headers). Show player name, action type (fold, raise €X, call, check, all-in), and the round label. Color-code actions: fold = muted grey, raise/all-in = amber, call/check = subdued white.
+
+- [ ] **Win condition banner in expanded section** — below the action log show a highlighted row: e.g. "Won at showdown with Full House" or "Won uncontested — everyone folded". If `wasShowdown` is true, show all revealed hole cards side by side.
+
+- [ ] **Hand duration chip in expanded section** — small label "⏱ 3m 42s" using `handDurationSeconds`. Only show if value is present.
+
+### UI — heart / favorite
+
+- [ ] **Heart button on each hand card** — add an `IconButton` (Icons.favorite / Icons.favorite_border) to the top-right of each `_HandCard`. Tapping calls `toggleFavoriteHand`. Animate the transition with a brief scale pop using `AnimationController`.
+
+- [ ] **Hearted hands are highlighted** — when `favoritedBy` contains the current user, add a thin amber border or a small amber "❤" badge to the collapsed card.
+
+### UI — filter bar
+
+- [ ] **Filter chips below the "Recent Hands" subtitle** — a horizontal scrollable row of chips: All · Favorites · My Wins · Showdowns. Tapping a chip updates `historyFilterProvider` and re-filters the list client-side.
+
+- [ ] **Apply filter in `GameHistoryScreen`** — read `historyFilterProvider` and filter the `hands` list accordingly before passing to `ListView`.
+
+### UI — session stats bar
+
+- [ ] **Stats summary row above the hand list** — a row of 3 mini-stat tiles showing: total hands played, your net gain/loss this session (sum of potAmount won minus blinds posted), and biggest pot of the session. Pull these from the existing `activeGameHandsProvider` data without extra Firestore reads.
+
+### Nice-to-have future features
+
+- [ ] **Share a hand** — long-press or button in expanded view to generate a text summary of the hand ("Hand #12 · Alice won €4.20 with a Flush after a raise war on the river") and trigger the native share sheet.
+
+- [ ] **Search by player name** — a search bar that filters the hand list to only hands where a specific player participated or won.
+
+- [ ] **Stack change sparkline** — a small mini chart (using `fl_chart` or a custom painter) next to the session stats showing your stack over time across all recorded hands.
+
+- [ ] **Pagination / load more** — if a session has > 30 hands, lazy-load older hands in batches of 20 using Firestore cursor-based pagination to keep the list fast.
+
+- [ ] **Export hand history** — a button in the top-right filter menu to export all hands in the current session as a plain-text or CSV file and share it.

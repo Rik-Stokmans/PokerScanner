@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../widgets/scanner_status_badge.dart';
 import '../widgets/gradient_button.dart';
 import '../providers/providers.dart';
 
@@ -35,7 +34,6 @@ class SessionAnalysisScreen extends ConsumerWidget {
                             fontSize: 24, fontWeight: FontWeight.w800,
                             color: AppColors.onSurface, letterSpacing: 3,
                           )),
-                      const ScannerStatusBadge(),
                     ],
                   ),
                   const Icon(Icons.menu, color: AppColors.onSurfaceVariant),

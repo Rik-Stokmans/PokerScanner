@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -52,6 +53,9 @@ class BleService {
   StreamSubscription<BluetoothConnectionState>? _connectionSub;
   StreamSubscription<List<int>>? _rfidSub;
   StreamSubscription<List<int>>? _batterySub;
+
+  BluetoothCharacteristic? _batteryChar;
+  Timer? _batteryPollTimer;
 
   bool _reconnecting = false;
   // ignore: prefer_final_fields
@@ -205,6 +209,15 @@ class BleService {
 
   Future<void> _setupDevice(BluetoothDevice device) async {
     final services = await device.discoverServices();
+
+    // Debug: log every discovered service and characteristic UUID.
+    for (final s in services) {
+      debugPrint('BLE service: ${s.serviceUuid}');
+      for (final c in s.characteristics) {
+        debugPrint('  char: ${c.characteristicUuid}  props: ${c.properties}');
+      }
+    }
+
     BluetoothService? targetService;
     for (final s in services) {
       if (s.serviceUuid == Guid(_kServiceUuid)) {
@@ -216,14 +229,40 @@ class BleService {
       throw Exception('RFID service not found on device');
     }
 
+    // Subscribe to RFID characteristic on the primary service.
     for (final char in targetService.characteristics) {
       if (char.characteristicUuid == Guid(_kRfidCharUuid)) {
         await char.setNotifyValue(true);
         _rfidSub = char.onValueReceived.listen(_onRfidData);
-      } else if (char.characteristicUuid == Guid(_kBatteryCharUuid)) {
-        await char.setNotifyValue(true);
-        _batterySub = char.onValueReceived.listen(_onBatteryData);
+        debugPrint('Subscribed to RFID characteristic');
       }
+    }
+
+    // The battery characteristic may live under a different BLE service
+    // (e.g. Nordic UART Service), so search all discovered services.
+    bool foundBattery = false;
+    for (final s in services) {
+      for (final char in s.characteristics) {
+        if (char.characteristicUuid == Guid(_kBatteryCharUuid)) {
+          _batteryChar = char;
+          await char.setNotifyValue(true);
+          _batterySub = char.onValueReceived.listen(_onBatteryData);
+          debugPrint('Subscribed to battery characteristic on service ${s.serviceUuid}');
+          foundBattery = true;
+          // Read immediately so we don't have to wait for the first notification.
+          await _pollBattery();
+          // Poll every 30 s as a reliable fallback — the device may not push
+          // notifications on a predictable schedule.
+          _batteryPollTimer?.cancel();
+          _batteryPollTimer = Timer.periodic(
+            const Duration(seconds: 30),
+            (_) => _pollBattery(),
+          );
+        }
+      }
+    }
+    if (!foundBattery) {
+      debugPrint('WARNING: Battery characteristic $_kBatteryCharUuid NOT found on any service');
     }
 
     // Watch for unexpected disconnects and auto-reconnect.
@@ -237,6 +276,19 @@ class BleService {
     });
   }
 
+  Future<void> _pollBattery() async {
+    if (_batteryChar == null) return;
+    try {
+      final bytes = await _batteryChar!.read();
+      if (bytes.isNotEmpty) {
+        debugPrint('Battery poll: ${utf8.decode(bytes, allowMalformed: true).trim()}');
+        _onBatteryData(bytes);
+      }
+    } catch (e) {
+      debugPrint('Battery poll failed: $e');
+    }
+  }
+
   void _onRfidData(List<int> bytes) {
     if (bytes.isEmpty) return;
     final raw = utf8.decode(bytes, allowMalformed: true).trim();
@@ -248,6 +300,7 @@ class BleService {
   void _onBatteryData(List<int> bytes) {
     if (bytes.isEmpty) return;
     final raw = utf8.decode(bytes, allowMalformed: true).trim();
+    debugPrint('Battery data received: "$raw" (${bytes.length} bytes)');
     final match = _batteryRegex.firstMatch(raw);
     if (match != null) {
       final pct = int.parse(match.group(1)!).clamp(0, 100);
@@ -255,6 +308,9 @@ class BleService {
       if (!_batteryStreamController.isClosed) {
         _batteryStreamController.add(pct);
       }
+      debugPrint('Battery level: $pct%');
+    } else {
+      debugPrint('Battery data did not match expected format BAT: NN%');
     }
   }
 
@@ -282,6 +338,9 @@ class BleService {
 
   Future<void> _disconnect({required bool intentional}) async {
     _reconnecting = false;
+    _batteryPollTimer?.cancel();
+    _batteryPollTimer = null;
+    _batteryChar = null;
     await _rfidSub?.cancel();
     await _batterySub?.cancel();
     await _connectionSub?.cancel();

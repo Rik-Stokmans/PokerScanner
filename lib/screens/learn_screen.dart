@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../widgets/scanner_status_badge.dart';
 import '../widgets/gradient_button.dart';
 
 class LearnScreen extends StatelessWidget {
@@ -32,7 +31,6 @@ class LearnScreen extends StatelessWidget {
                           letterSpacing: 3,
                         ),
                       ),
-                      const ScannerStatusBadge(),
                     ],
                   ),
                   const Icon(Icons.school, color: AppColors.primary, size: 28),

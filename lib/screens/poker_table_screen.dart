@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../widgets/scanner_status_badge.dart';
 import '../widgets/gradient_button.dart';
 import '../providers/providers.dart';
 import '../services/firestore_service.dart';
@@ -173,6 +172,18 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Battery badge (leftmost)
+                      Consumer(builder: (context, ref, _) {
+                        final battery = ref.watch(scannerBatteryProvider).valueOrNull;
+                        final connected = ref.watch(scannerConnectedProvider);
+                        if (!connected && battery == null) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: battery != null
+                              ? _BatteryBadge(percentage: battery)
+                              : const _BatteryBadgeEmpty(),
+                        );
+                      }),
                       // Add Bot button (host only, max 4 bots)
                       if (game.hostId == user.id) ...[
                         Builder(builder: (context) {
@@ -1767,4 +1778,170 @@ class _CreateTableDialogState extends State<_CreateTableDialog> {
       ),
     );
   }
+}
+
+// ── iOS-style battery badge ─────────────────────────────────────────────
+
+class _BatteryBadgeEmpty extends StatelessWidget {
+  const _BatteryBadgeEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _BatteryPainter(
+        percentage: 0,
+        fillColor: Colors.transparent,
+        emptyOverride: true,
+      ),
+      child: const SizedBox(
+        width: 42,
+        height: 18,
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.only(right: 2),
+            child: Text(
+              '–',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Colors.white54,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BatteryBadge extends StatelessWidget {
+  final int percentage;
+  const _BatteryBadge({required this.percentage});
+
+  Color get _fillColor {
+    if (percentage >= 30) return AppColors.primary;
+    if (percentage >= 15) return AppColors.tertiary;
+    return AppColors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _BatteryPainter(
+        percentage: percentage,
+        fillColor: _fillColor,
+      ),
+      child: SizedBox(
+        width: 42,
+        height: 18,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: Text(
+              '$percentage',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BatteryPainter extends CustomPainter {
+  final int percentage;
+  final Color fillColor;
+  final bool emptyOverride;
+
+  _BatteryPainter({
+    required this.percentage,
+    required this.fillColor,
+    this.emptyOverride = false,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const tipWidth = 2.5;
+    const tipGap = 1.0;
+    final bodyWidth = size.width - tipWidth - tipGap;
+    final bodyHeight = size.height;
+    const bodyRadius = 3.5;
+
+    // Filled body (rounded rect, fill level clipped)
+    final pct = emptyOverride ? 0.0 : percentage.clamp(0, 100) / 100;
+    final fillWidth = bodyWidth * pct;
+
+    // When emptyOverride, fill entire body with muted grey
+    if (emptyOverride) {
+      canvas.save();
+      canvas.clipRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, bodyWidth, bodyHeight),
+        const Radius.circular(bodyRadius),
+      ));
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, bodyWidth, bodyHeight),
+        Paint()..color = AppColors.surfaceContainerHighest,
+      );
+      canvas.restore();
+    } else {
+      if (fillWidth > 0) {
+        canvas.save();
+        canvas.clipRRect(RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, bodyWidth, bodyHeight),
+          const Radius.circular(bodyRadius),
+        ));
+        canvas.drawRect(
+          Rect.fromLTWH(0, 0, fillWidth, bodyHeight),
+          Paint()..color = fillColor,
+        );
+        canvas.restore();
+      }
+
+      // Unfilled portion of body (dark/transparent area)
+      if (pct < 1.0) {
+        canvas.save();
+        canvas.clipRRect(RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, bodyWidth, bodyHeight),
+          const Radius.circular(bodyRadius),
+        ));
+        canvas.drawRect(
+          Rect.fromLTWH(fillWidth, 0, bodyWidth - fillWidth, bodyHeight),
+          Paint()..color = AppColors.surfaceContainerHighest,
+        );
+        canvas.restore();
+      }
+    }
+
+    // Body outline
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, bodyWidth, bodyHeight),
+      const Radius.circular(bodyRadius),
+    );
+    canvas.drawRRect(
+      bodyRect,
+      Paint()
+        ..color = AppColors.onSurfaceVariant.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+
+    // Tip (positive terminal)
+    final tipHeight = bodyHeight * 0.35;
+    final tipTop = (bodyHeight - tipHeight) / 2;
+    final tipRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(bodyWidth + tipGap, tipTop, tipWidth, tipHeight),
+      const Radius.circular(1.5),
+    );
+    canvas.drawRRect(tipRect, Paint()..color = AppColors.onSurfaceVariant.withValues(alpha: 0.5));
+  }
+
+  @override
+  bool shouldRepaint(_BatteryPainter old) =>
+      old.percentage != percentage || old.fillColor != fillColor || old.emptyOverride != emptyOverride;
 }

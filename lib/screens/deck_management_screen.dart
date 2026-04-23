@@ -7,7 +7,6 @@ import '../providers/providers.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_button.dart';
-import '../widgets/scanner_status_badge.dart';
 
 final _decksProvider = StreamProvider.autoDispose<List<DeckModel>>((ref) {
   final user = ref.watch(currentUserProvider).value;
@@ -94,7 +93,6 @@ class _DeckManagementScreenState extends ConsumerState<DeckManagementScreen> {
                           letterSpacing: 2,
                         ),
                       ),
-                      ScannerStatusBadge(isActive: _scannerConnected),
                     ],
                   ),
                 ],
