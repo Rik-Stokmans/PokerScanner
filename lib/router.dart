@@ -13,6 +13,7 @@ import 'screens/session_analysis_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/invite_friends_screen.dart';
 import 'screens/learn_screen.dart';
+import 'screens/learn/range_trainer_screen.dart';
 import 'screens/deck_management_screen.dart';
 import 'screens/deck_registration_screen.dart';
 import 'screens/range_trainer_screen.dart';
@@ -75,6 +76,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/learn',
             builder: (context, state) => const LearnScreen(),
+          ),
+          GoRoute(
+            path: '/learn/range-trainer',
+            builder: (context, state) => const RangeTrainerScreen(),
           ),
         ],
       ),
