@@ -215,28 +215,22 @@ This is the foundation for all drills. Drill completions award XP; XP unlocks le
 
 Personalised coaching tab that surfaces the most relevant content based on the user's current session data and learning history.
 
-- [ ] **Create `_ForYouTab` widget** inside `lib/screens/learn_screen.dart` (or extract to `lib/screens/learn/for_you_tab.dart`). It is a `ConsumerWidget` that reads `sessionAnalysisProvider`, `learningProgressProvider`, and `currentUserProvider`.
-  > note: partial — cherry-pick conflict in poker-scanner (learn_screen.dart rewrite conflicted with g2 tab layout)
+- [x] **Create `_ForYouTab` widget** inside `lib/screens/learn_screen.dart` (or extract to `lib/screens/learn/for_you_tab.dart`). It is a `ConsumerWidget` that reads `sessionAnalysisProvider`, `learningProgressProvider`, and `currentUserProvider`.
 
-- [ ] **Level & XP banner** — at the top of the For You tab show a card
-  > note: partial — cherry-pick conflict in poker-scanner (depends on _ForYouTab from g3) with the user's current level name (e.g. "Grinder") and a linear progress bar filling from current XP to next level threshold. Show numeric XP (e.g. "1,842 / 3,000 XP"). Use `LinearProgressIndicator` with `AppColors.primary` fill on a dark track.
+- [x] **Level & XP banner** — at the top of the For You tab show a card with the user's current level name (e.g. "Grinder") and a linear progress bar filling from current XP to next level threshold. Show numeric XP (e.g. "1,842 / 3,000 XP"). Use `LinearProgressIndicator` with `AppColors.primary` fill on a dark track.
 
-- [ ] **Daily streak chip** — next to the level banner
-  > note: partial — cherry-pick conflict in poker-scanner (depends on _ForYouTab from g3) show a small chip: flame icon + "5 day streak" in amber if streak > 0, or "Start your streak today" in muted text if streak is 0. Chip uses `AppColors.primary.withOpacity(0.15)` background.
+- [x] **Daily streak chip** — next to the level banner show a small chip: flame icon + "5 day streak" in amber if streak > 0, or "Start your streak today" in muted text if streak is 0. Chip uses `AppColors.primary.withOpacity(0.15)` background.
 
-- [ ] **Personalised drill recommendations** — read `sessionAnalysisProvider.leakWarnings`
-  > note: partial — cherry-pick conflict in poker-scanner (depends on _ForYouTab from g3) and map each leak to a recommended drill:
+- [x] **Personalised drill recommendations** — read `sessionAnalysisProvider.leakWarnings` and map each leak to a recommended drill:
   - `'Lost 4+ of last 5 hands'` → recommend **Decision Scenarios** drill with label "Fix Your Tilt Spots"
   - `'Won 0 showdowns in last 8 hands'` → recommend **Hand Strength Quiz** (use Hand Review drill) with label "Improve Your Showdown Hands"
   - `'Net loss from BB position'` → recommend **Scenario Drill** filtered to BB defense category with label "Master Big Blind Defense"
   - If no leaks: recommend the drill with the lowest accuracy in `drillStats`, or **Range Trainer** if no history exists.
   Show 1–3 recommendation cards, each with drill name, description, estimated time ("~5 min"), and a `GradientButton` "Start" that navigates to the drill screen via `context.go(...)`.
 
-- [ ] **Session insight card** — if `sessionAnalysisProvider` has data
-  > note: partial — cherry-pick conflict in poker-scanner (depends on _ForYouTab from g3), show the `aiInsight` string in a card styled identically to the existing AI Mistake Analysis card (green-tinted border, brain/lightbulb icon). If no session is active, show a placeholder: "Play a session to get personalised insights."
+- [x] **Session insight card** — if `sessionAnalysisProvider` has data, show the `aiInsight` string in a card styled identically to the existing AI Mistake Analysis card (green-tinted border, brain/lightbulb icon). If no session is active, show a placeholder: "Play a session to get personalised insights."
 
-- [ ] **Resume last drill card** — read `learningProgressProvider.drillStats`
-  > note: partial — cherry-pick conflict in poker-scanner (depends on _ForYouTab from g3). Find the drill with the most recent activity (use a `lastAttemptDate` field to be added to `DrillStat`; add `lastAttemptDate: DateTime?` to `DrillStat` and update in `recordDrillResult`). Show a "Continue" card for that drill with its accuracy % and a "Resume" button.
+- [x] **Resume last drill card** — read `learningProgressProvider.drillStats`. Find the drill with the most recent activity (use a `lastAttemptDate` field to be added to `DrillStat`; add `lastAttemptDate: DateTime?` to `DrillStat` and update in `recordDrillResult`). Show a "Continue" card for that drill with its accuracy % and a "Resume" button.
 
 ---
 
