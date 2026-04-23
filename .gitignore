@@ -54,3 +54,5 @@ ios/GoogleService-Info.plist
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+stitch_poker_scanner/DESIGN.md
+stitch_poker_scanner/screen.png
