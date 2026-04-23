@@ -203,6 +203,11 @@ final scannerConnectedProvider = Provider<bool>((ref) {
   return stateAsync.value == BleConnectionState.connected;
 });
 
+/// Parsed battery percentage (0–100) from the scanner.
+final scannerBatteryProvider = StreamProvider<int>((ref) {
+  return BleService.instance.batteryStream;
+});
+
 /// Raw chip-scan hex ID strings from the scanner.
 final chipScanStreamProvider = StreamProvider<String>((ref) {
   return BleService.instance.chipStream;

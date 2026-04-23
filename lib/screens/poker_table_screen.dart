@@ -142,7 +142,7 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
     final isFacingBet = callAmount > 0;
     final minRaiseAmount = (isFacingBet ? (highBet * 2 - myBet) : game.bigBlind).clamp(0.0, myStack);
     final showActionBar = !game.handOver && !hasFolded && isMyTurn;
-    final showNewHandBar = game.handOver && game.hostId == user.id && game.deckId != null;
+    final showNewHandBar = game.hostId == user.id && game.deckId != null;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -154,26 +154,24 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
               // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        game.name.toUpperCase(),
-                        style: GoogleFonts.manrope(
-                          fontSize: 20, fontWeight: FontWeight.w800,
-                          color: AppColors.onSurface, letterSpacing: 2,
-                        ),
+                  Expanded(
+                    child: Text(
+                      game.name.toUpperCase(),
+                      style: GoogleFonts.manrope(
+                        fontSize: 20, fontWeight: FontWeight.w800,
+                        color: AppColors.onSurface, letterSpacing: 2,
                       ),
-                      const ScannerStatusBadge(),
-                    ],
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       // Add Bot button (host only, max 4 bots)
                       if (game.hostId == user.id) ...[
@@ -223,7 +221,7 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
-                            builder: (_) => TableSetupSheet(game: game),
+                            builder: (_) => TableSetupSheet(game: game, userId: user.id),
                           ),
                           child: Container(
                             margin: const EdgeInsets.only(right: 8),
@@ -262,110 +260,90 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 32),
+
+              // ── Total Pot — centred, editorial ────────────────────────────
+              Text('TOTAL POT',
+                  style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w500,
+                    color: AppColors.onSurfaceVariant, letterSpacing: 1.2,
+                  )),
+              const SizedBox(height: 4),
+              Text('€${game.pot.toStringAsFixed(2)}',
+                  style: GoogleFonts.manrope(
+                    fontSize: 40, fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  )),
+
               const SizedBox(height: 28),
 
-              // Table Info
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('TABLE INFO',
-                            style: GoogleFonts.inter(
-                              fontSize: 12, fontWeight: FontWeight.w500,
-                              color: AppColors.onSurfaceVariant, letterSpacing: 0.8,
-                            )),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondaryContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(game.roundLabel,
-                              style: GoogleFonts.inter(
-                                fontSize: 11, fontWeight: FontWeight.w600,
-                                color: AppColors.onSecondaryContainer,
-                              )),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        // 5 community card placeholders
-                        Expanded(
-                          child: FittedBox(
-                            alignment: Alignment.centerLeft,
-                            fit: BoxFit.scaleDown,
-                            child: Row(
-                              children: List.generate(5, (i) {
-                                final card = i < game.communityCards.length
-                                    ? game.communityCards[i]
-                                    : null;
-                                return Padding(
-                                  padding: EdgeInsets.only(right: i < 4 ? 6 : 0),
-                                  child: card != null
-                                      ? _CommunityCard(card: card)
-                                      : Container(
-                                          width: 44, height: 60,
-                                          decoration: BoxDecoration(
-                                            color: AppColors.surfaceContainerHigh,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: AppColors.outlineVariant
-                                                  .withValues(alpha: 0.2),
-                                            ),
-                                          ),
-                                        ),
-                                );
-                              }),
+              // ── Community cards — centred row, no container ───────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final card = i < game.communityCards.length
+                      ? game.communityCards[i]
+                      : null;
+                  return Padding(
+                    padding: EdgeInsets.only(right: i < 4 ? 8 : 0),
+                    child: card != null
+                        ? _CommunityCard(card: card)
+                        : Container(
+                            width: 56, height: 76,
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Pot amount
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('POT',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10, fontWeight: FontWeight.w500,
-                                  color: AppColors.onSurfaceVariant, letterSpacing: 0.8,
-                                )),
-                            Text('€${game.pot.toStringAsFixed(2)}',
-                                style: GoogleFonts.manrope(
-                                  fontSize: 28, fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                )),
-                          ],
-                        ),
-                      ],
+                  );
+                }),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── Round stage + player position ─────────────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    if (isMyTurn && !hasFolded)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
+                    child: Text(
+                      _stageName(game),
+                      style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w700,
+                        color: AppColors.onSurfaceVariant, letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
+                  Builder(builder: (_) {
+                    final pos = _playerPositionLabel(game, user.id);
+                    if (pos == null) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.3),
                           ),
-                          child: Text('Your turn',
-                              style: GoogleFonts.inter(
-                                fontSize: 11, fontWeight: FontWeight.w700,
-                                color: AppColors.primary,
-                              )),
+                        ),
+                        child: Text(
+                          pos,
+                          style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w700,
+                            color: AppColors.primary, letterSpacing: 0.8,
+                          ),
                         ),
                       ),
-                  ],
-                ),
+                    );
+                  }),
+                ],
               ),
 
               const SizedBox(height: 24),
@@ -375,7 +353,7 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
 
               // ── No deck connected banner ───────────────────────────────────
               if (game.deckId == null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 _NoDeckBanner(game: game, userId: user.id),
               ],
 
@@ -429,7 +407,10 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
           // ── Sticky start new hand bar (host only) ─────────────────────
           if (showNewHandBar)
             _StartNewHandBar(
-              onTap: () => FirestoreService.startNewHandForScanner(game.id, game),
+              handOver: game.handOver,
+              onTap: game.handOver
+                  ? () => FirestoreService.startNewHandForScanner(game.id, game)
+                  : null,
             ),
         ],
         ),
@@ -518,7 +499,6 @@ class _MyHandPanelState extends ConsumerState<_MyHandPanel> {
     final myCards = game.playerHands[widget.userId] ?? [];
     if (myCards.length >= 2) return;
     if (myCards.contains(card)) return;
-
     await FirestoreService.assignHoleCard(game.id, game, widget.userId, card);
   }
 
@@ -530,176 +510,107 @@ class _MyHandPanelState extends ConsumerState<_MyHandPanel> {
     final hasCards = myCards.length == 2;
     final handShown = game.shownHandPlayerIds.contains(widget.userId);
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row with peek toggle
-          Row(
-            children: [
-              Text('YOUR HAND',
-                  style: GoogleFonts.inter(
-                    fontSize: 12, fontWeight: FontWeight.w500,
-                    color: AppColors.onSurfaceVariant, letterSpacing: 0.8,
-                  )),
-              const Spacer(),
-              if (hasCards)
-                GestureDetector(
-                  onTap: () => setState(() => _revealed = !_revealed),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _revealed
-                          ? AppColors.primary.withValues(alpha: 0.12)
-                          : AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _revealed
-                            ? AppColors.primary.withValues(alpha: 0.3)
-                            : AppColors.outlineVariant.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _revealed ? Icons.visibility : Icons.visibility_off,
-                          size: 12,
-                          color: _revealed ? AppColors.primary : AppColors.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _revealed ? 'Peek' : 'Hidden',
-                          style: GoogleFonts.inter(
-                            fontSize: 11, fontWeight: FontWeight.w600,
-                            color: _revealed ? AppColors.primary : AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
+    return Column(
+      children: [
+        // "YOUR HAND" label — centred, primary color
+        Text('YOUR HAND',
+            style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w600,
+              color: AppColors.primary, letterSpacing: 1.2,
+            )),
+        const SizedBox(height: 20),
 
-          // Card faces or card backs
-          Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(2, (i) {
-                final card = i < myCards.length ? myCards[i] : null;
-                return Padding(
-                  padding: EdgeInsets.only(right: i == 0 ? 10 : 0),
-                  child: card != null && _revealed
-                      ? _HoleCard(card: card)
-                      : card != null
-                          ? _CardBack()
-                          : Container(
-                              width: 64, height: 88,
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: AppColors.outlineVariant.withValues(alpha: 0.2),
-                                ),
-                              ),
-                              child: Center(
-                                child: Icon(Icons.help_outline,
-                                    size: 22,
-                                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
-                              ),
+        // Card faces or card backs — larger, centred
+        GestureDetector(
+          onTap: hasCards ? () => setState(() => _revealed = !_revealed) : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(2, (i) {
+              final card = i < myCards.length ? myCards[i] : null;
+              return Padding(
+                padding: EdgeInsets.only(right: i == 0 ? 12 : 0),
+                child: card != null && _revealed
+                    ? _HoleCard(card: card)
+                    : card != null
+                        ? Transform.rotate(
+                            angle: i == 0 ? -0.08 : 0.08,
+                            child: const _CardBack(),
+                          )
+                        : Container(
+                            width: 90, height: 126,
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                );
-              }),
+                          ),
+              );
+            }),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // REVEAL HAND / Hand Shown pill button
+        if (game.handOver && hasCards)
+          GestureDetector(
+            onTap: handShown
+                ? null
+                : () => FirestoreService.showHandInGame(game.id, widget.userId),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                color: handShown
+                    ? AppColors.surfaceContainerHigh
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: handShown
+                      ? AppColors.outlineVariant.withValues(alpha: 0.15)
+                      : AppColors.primary.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Text(
+                handShown ? 'HAND SHOWN' : 'REVEAL HAND',
+                style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: handShown ? AppColors.onSurfaceVariant : AppColors.primary,
+                  letterSpacing: 1.0,
+                ),
+              ),
             ),
           ),
 
-          // Show Hand button — only available when the hand is over
-          if (game.handOver && hasCards) ...[
-            const SizedBox(height: 14),
-            GestureDetector(
-              onTap: handShown
-                  ? null
-                  : () => FirestoreService.showHandInGame(game.id, widget.userId),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: handShown
-                      ? AppColors.surfaceContainerHigh
-                      : AppColors.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: handShown
-                        ? AppColors.outlineVariant.withValues(alpha: 0.2)
-                        : AppColors.primary.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        handShown ? Icons.check_circle_outline : Icons.visibility,
-                        size: 14,
-                        color: handShown ? AppColors.onSurfaceVariant : AppColors.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        handShown ? 'Hand Shown' : 'Show Hand',
-                        style: GoogleFonts.inter(
-                          fontSize: 12, fontWeight: FontWeight.w600,
-                          color: handShown ? AppColors.onSurfaceVariant : AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
+        // Connect Scanner button when BLE is disconnected
+        if (!isConnected) ...[
+          const SizedBox(height: 14),
+          GestureDetector(
+            onTap: () => context.push('/scanner-setup'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.outlineVariant.withValues(alpha: 0.3),
                 ),
               ),
-            ),
-          ],
-
-          // Connect Scanner button when BLE is disconnected
-          if (!isConnected) ...[
-            const SizedBox(height: 14),
-            GestureDetector(
-              onTap: () => context.push('/scanner-setup'),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppColors.outlineVariant.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.bluetooth_searching,
-                          size: 14, color: AppColors.onSurfaceVariant),
-                      const SizedBox(width: 6),
-                      Text('Connect Scanner',
-                          style: GoogleFonts.inter(
-                            fontSize: 12, fontWeight: FontWeight.w600,
-                            color: AppColors.onSurfaceVariant,
-                          )),
-                    ],
-                  ),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.bluetooth_searching,
+                      size: 14, color: AppColors.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text('Connect Scanner',
+                      style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: AppColors.onSurfaceVariant,
+                      )),
+                ],
               ),
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -810,9 +721,10 @@ class _NoDeckBanner extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _StartNewHandBar extends StatelessWidget {
-  final VoidCallback onTap;
+  final bool handOver;
+  final VoidCallback? onTap;
 
-  const _StartNewHandBar({required this.onTap});
+  const _StartNewHandBar({required this.handOver, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -841,24 +753,32 @@ class _StartNewHandBar extends StatelessWidget {
           width: double.infinity,
           height: 56,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.primary, AppColors.primaryContainer],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: handOver
+                ? const LinearGradient(
+                    colors: [AppColors.primary, AppColors.primaryContainer],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: handOver ? null : AppColors.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.refresh, size: 16, color: AppColors.onPrimary),
+                Icon(
+                  handOver ? Icons.refresh : Icons.hourglass_bottom_rounded,
+                  size: 16,
+                  color: handOver ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+                ),
                 const SizedBox(width: 8),
                 Text(
-                  'START NEW HAND',
+                  handOver ? 'START NEW HAND' : 'HAND IN PROGRESS',
                   style: GoogleFonts.inter(
                     fontSize: 13, fontWeight: FontWeight.w800,
-                    color: AppColors.onPrimary, letterSpacing: 1.0,
+                    color: handOver ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+                    letterSpacing: 1.0,
                   ),
                 ),
               ],
@@ -1445,36 +1365,32 @@ class _HoleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 64, height: 88,
+      width: 90, height: 126,
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.3),
-          width: 1.5,
-        ),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 8,
+            blurRadius: 12,
             spreadRadius: 1,
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(card.rank,
                 style: GoogleFonts.inter(
-                  fontSize: 16, fontWeight: FontWeight.w800,
+                  fontSize: 22, fontWeight: FontWeight.w800,
                   color: card.suitColor, height: 1.0,
                 )),
             Center(
               child: Text(card.suitSymbol,
-                  style: TextStyle(fontSize: 26, color: card.suitColor, height: 1.0)),
+                  style: TextStyle(fontSize: 34, color: card.suitColor, height: 1.0)),
             ),
           ],
         ),
@@ -1489,23 +1405,119 @@ class _CardBack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 64, height: 88,
+      width: 90, height: 126,
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.2),
-          width: 1.5,
-        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Center(
-        child: Icon(
-          Icons.lock_outline,
-          size: 20,
-          color: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: CustomPaint(
+          painter: _DiagonalStripePainter(),
+          size: const Size(90, 126),
         ),
       ),
     );
+  }
+}
+
+class _DiagonalStripePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()..color = AppColors.surfaceContainerHigh;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
+
+    final stripePaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.12)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke;
+
+    const spacing = 14.0;
+    final total = size.width + size.height;
+    for (double d = -total; d < total * 2; d += spacing) {
+      canvas.drawLine(
+        Offset(d, 0),
+        Offset(d - size.height, size.height),
+        stripePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round stage + position helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+String _stageName(GameModel game) {
+  if (game.handOver) return 'SHOWDOWN';
+  switch (game.currentRound) {
+    case BettingRound.preflop: return 'PRE-FLOP';
+    case BettingRound.flop:    return 'FLOP';
+    case BettingRound.turn:    return 'TURN';
+    case BettingRound.river:   return 'RIVER';
+  }
+}
+
+String? _playerPositionLabel(GameModel game, String userId) {
+  final dealerId = game.dealerPlayerId;
+  if (dealerId == null) return null;
+
+  int? dealerSeat, userSeat;
+  for (final entry in game.seatAssignments.entries) {
+    final idx = int.tryParse(entry.key);
+    if (idx == null) continue;
+    if (entry.value == dealerId) dealerSeat = idx;
+    if (entry.value == userId) userSeat = idx;
+  }
+  if (dealerSeat == null || userSeat == null) return null;
+
+  final seatedIndices = game.seatAssignments.keys
+      .map((k) => int.tryParse(k))
+      .whereType<int>()
+      .toList()
+    ..sort();
+  final n = seatedIndices.length;
+  if (n < 2) return null;
+
+  final dealerPos = seatedIndices.indexOf(dealerSeat);
+  final userPos   = seatedIndices.indexOf(userSeat);
+  if (dealerPos == -1 || userPos == -1) return null;
+
+  final relPos = (userPos - dealerPos + n) % n;
+  return _fullPositionLabel(relPos, n);
+}
+
+String _fullPositionLabel(int relPos, int n) {
+  if (n == 2) return relPos == 0 ? 'Button / SB' : 'Big Blind';
+  final labels = _fullPositionLabels(n);
+  return relPos < labels.length ? labels[relPos] : 'Middle Position';
+}
+
+List<String> _fullPositionLabels(int n) {
+  switch (n) {
+    case 3: return ['Button', 'Small Blind', 'Big Blind'];
+    case 4: return ['Button', 'Small Blind', 'Big Blind', 'Under the Gun'];
+    case 5: return ['Button', 'Small Blind', 'Big Blind', 'Under the Gun', 'Cutoff'];
+    case 6: return ['Button', 'Small Blind', 'Big Blind', 'Under the Gun', 'Hijack', 'Cutoff'];
+    case 7: return ['Button', 'Small Blind', 'Big Blind', 'Under the Gun', 'UTG+1', 'Hijack', 'Cutoff'];
+    case 8: return ['Button', 'Small Blind', 'Big Blind', 'Under the Gun', 'UTG+1', 'UTG+2', 'Hijack', 'Cutoff'];
+    case 9: return ['Button', 'Small Blind', 'Big Blind', 'Under the Gun', 'UTG+1', 'UTG+2', 'Lojack', 'Hijack', 'Cutoff'];
+    default:
+      final result = <String>['Button', 'Small Blind', 'Big Blind', 'Under the Gun'];
+      for (int i = 4; i < n - 2; i++) { result.add('UTG+${i - 3}'); }
+      result.add('Hijack');
+      result.add('Cutoff');
+      return result;
   }
 }
 
@@ -1516,26 +1528,25 @@ class _CommunityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 44, height: 60,
+      width: 56, height: 76,
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.2)),
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(card.rank,
                 style: GoogleFonts.inter(
-                  fontSize: 12, fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface, height: 1.0,
+                  fontSize: 15, fontWeight: FontWeight.w800,
+                  color: card.suitColor, height: 1.0,
                 )),
             Center(
               child: Text(card.suitSymbol,
-                  style: TextStyle(fontSize: 18, color: card.suitColor, height: 1.0)),
+                  style: TextStyle(fontSize: 22, color: card.suitColor, height: 1.0)),
             ),
           ],
         ),

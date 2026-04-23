@@ -649,19 +649,14 @@ class FirestoreService {
   /// The host is responsible for calling this for each scanned hole card.
   static Future<void> assignHoleCard(
       String gameId, GameModel game, String targetPlayerId, CardModel card) async {
-    final hands = game.playerHands.map(
-      (uid, cards) => MapEntry(uid, List<CardModel>.from(cards)),
-    );
-    final hand = List<CardModel>.from(hands[targetPlayerId] ?? []);
+    final hand = game.playerHands[targetPlayerId] ?? [];
     if (hand.length >= 2) return; // already has 2 cards
     if (hand.contains(card)) return; // duplicate guard
-    hand.add(card);
-    hands[targetPlayerId] = hand;
 
+    // Use arrayUnion so concurrent scans from both RFID readers don't
+    // overwrite each other (both fire nearly simultaneously on a new hand).
     await _db.collection('games').doc(gameId).update({
-      'playerHands': hands.map(
-        (uid, cards) => MapEntry(uid, cards.map((c) => c.toMap()).toList()),
-      ),
+      'playerHands.$targetPlayerId': FieldValue.arrayUnion([card.toMap()]),
     });
   }
 

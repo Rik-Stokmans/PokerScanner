@@ -37,9 +37,14 @@ class BleService {
   BleConnectionState _state = BleConnectionState.disconnected;
   BleConnectionState get state => _state;
 
-  /// Battery level string, e.g. "BAT: 87%". Null until first notification.
-  String? get batteryLevel => _batteryLevel;
-  String? _batteryLevel;
+  /// Parsed battery percentage (0–100). Null until first notification.
+  int? get batteryLevel => _batteryLevel;
+  int? _batteryLevel;
+
+  /// Emits parsed battery percentage as it arrives from the device.
+  final StreamController<int> _batteryStreamController =
+      StreamController<int>.broadcast();
+  Stream<int> get batteryStream => _batteryStreamController.stream;
 
   // ── Private state ────────────────────────────────────────────────────────
 
@@ -238,9 +243,19 @@ class BleService {
     if (raw.isNotEmpty) _chipStreamController.add(raw);
   }
 
+  static final RegExp _batteryRegex = RegExp(r'BAT:\s*(\d+)%');
+
   void _onBatteryData(List<int> bytes) {
     if (bytes.isEmpty) return;
-    _batteryLevel = utf8.decode(bytes, allowMalformed: true).trim();
+    final raw = utf8.decode(bytes, allowMalformed: true).trim();
+    final match = _batteryRegex.firstMatch(raw);
+    if (match != null) {
+      final pct = int.parse(match.group(1)!).clamp(0, 100);
+      _batteryLevel = pct;
+      if (!_batteryStreamController.isClosed) {
+        _batteryStreamController.add(pct);
+      }
+    }
   }
 
   void _scheduleReconnect(BluetoothDevice device) {

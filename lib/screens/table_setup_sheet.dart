@@ -8,7 +8,8 @@ import '../theme/app_colors.dart';
 
 class TableSetupSheet extends StatefulWidget {
   final GameModel game;
-  const TableSetupSheet({super.key, required this.game});
+  final String userId;
+  const TableSetupSheet({super.key, required this.game, required this.userId});
 
   @override
   State<TableSetupSheet> createState() => _TableSetupSheetState();
@@ -401,6 +402,50 @@ class _TableSetupSheetState extends State<TableSetupSheet> {
               ),
             ),
 
+          // Start New Hand button (host only, always active)
+          if (widget.userId == widget.game.hostId) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  FirestoreService.startNewHandForScanner(
+                      widget.game.id, widget.game);
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.primary, AppColors.primaryContainer],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.refresh, size: 16, color: AppColors.onPrimary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'START NEW HAND',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.onPrimary,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 28),
         ],
       ),
@@ -503,6 +548,28 @@ class _TableCanvas extends StatelessWidget {
     });
   }
 
+  String? _positionLabelForSeat(int seatIndex) {
+    final dealerId = dealerPlayerId;
+    if (dealerId == null) return null;
+
+    int? dealerSeat;
+    for (final entry in assignments.entries) {
+      if (entry.value == dealerId) { dealerSeat = entry.key; break; }
+    }
+    if (dealerSeat == null) return null;
+
+    final seatedIndices = assignments.keys.toList()..sort();
+    final n = seatedIndices.length;
+    if (n < 2) return null;
+
+    final dealerPos = seatedIndices.indexOf(dealerSeat);
+    final seatPos   = seatedIndices.indexOf(seatIndex);
+    if (dealerPos == -1 || seatPos == -1) return null;
+
+    final relPos = (seatPos - dealerPos + n) % n;
+    return _shortPositionLabel(relPos, n);
+  }
+
   Widget _buildSeat(
       int index, double cx, double cy, double rx, double ry, double seatR) {
     // Start at top (−π/2), go clockwise
@@ -515,6 +582,7 @@ class _TableCanvas extends StatelessWidget {
     final isDealer = occupantId != null && occupantId == dealerPlayerId;
     final isBot = occupantId != null && BotService.isBot(occupantId);
     final isHighlighted = occupantId == null && selectedPlayerId != null;
+    final posLabel = occupantId != null ? _positionLabelForSeat(index) : null;
 
     final diameter = seatR * 2;
 
@@ -620,6 +688,24 @@ class _TableCanvas extends StatelessWidget {
                   ),
                 ),
               ),
+
+            // Position badge
+            if (posLabel != null)
+              Container(
+                margin: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _positionBadgeColor(posLabel),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  posLabel,
+                  style: GoogleFonts.inter(
+                    fontSize: 8, fontWeight: FontWeight.w800,
+                    color: Colors.white, letterSpacing: 0.3,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -630,6 +716,32 @@ class _TableCanvas extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+String _shortPositionLabel(int relPos, int n) {
+  if (n == 2) return relPos == 0 ? 'BTN/SB' : 'BB';
+  switch (relPos) {
+    case 0: return 'BTN';
+    case 1: return 'SB';
+    case 2: return 'BB';
+  }
+  if (relPos == n - 1) return 'CO';
+  if (n >= 5 && relPos == n - 2) return 'HJ';
+  if (n >= 9 && relPos == n - 3) return 'LJ';
+  if (relPos == 3) return 'UTG';
+  if (relPos == 4) return 'UTG+1';
+  if (relPos == 5) return 'UTG+2';
+  return 'MP';
+}
+
+Color _positionBadgeColor(String label) {
+  switch (label) {
+    case 'BTN':
+    case 'BTN/SB': return Colors.amber.shade700;
+    case 'SB':     return Colors.blueAccent;
+    case 'BB':     return Colors.redAccent;
+    default:       return const Color(0xFF546E7A); // blue-grey
+  }
+}
 
 String _shortName(String name) {
   final first = name.split(' ').first;
