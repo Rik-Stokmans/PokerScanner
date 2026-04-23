@@ -37,6 +37,48 @@ class _TableSetupSheetState extends State<TableSetupSheet> {
       .where((id) => !_assignedIds.contains(id))
       .toList();
 
+  Future<void> _removePlayer(String playerId) async {
+    // Do not allow removing the host
+    if (playerId == widget.game.hostId) return;
+    final name = widget.game.playerNames[playerId] ?? playerId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        title: Text(
+          'Remove player?',
+          style: GoogleFonts.manrope(
+            fontWeight: FontWeight.w800,
+            color: AppColors.onSurface,
+          ),
+        ),
+        content: Text(
+          'Remove "$name" from the game?',
+          style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Remove',
+                style: GoogleFonts.inter(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() {
+      _assignments.removeWhere((_, v) => v == playerId);
+      if (_dealerPlayerId == playerId) _dealerPlayerId = null;
+      if (_selectedPlayerId == playerId) _selectedPlayerId = null;
+    });
+    await FirestoreService.removePlayerFromGame(widget.game.id, playerId);
+  }
+
   Future<void> _persist() async {
     await FirestoreService.updateTableSetup(
       gameId: widget.game.id,
@@ -80,6 +122,52 @@ class _TableSetupSheetState extends State<TableSetupSheet> {
     setState(() {
       _selectedPlayerId = _selectedPlayerId == playerId ? null : playerId;
     });
+  }
+
+  Future<void> _onSeatLongPress(String occupantId) async {
+    final isHost = occupantId == widget.game.hostId;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.casino_outlined, color: Colors.amber),
+              title: Text(
+                'Set as Dealer',
+                style: GoogleFonts.inter(
+                    color: AppColors.onSurface, fontWeight: FontWeight.w600),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _setDealer(occupantId);
+              },
+            ),
+            if (!isHost)
+              ListTile(
+                leading: const Icon(Icons.person_remove_outlined,
+                    color: Colors.redAccent),
+                title: Text(
+                  'Remove from game',
+                  style: GoogleFonts.inter(
+                      color: Colors.redAccent, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _removePlayer(occupantId);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _setDealer(String playerId) {
@@ -181,7 +269,7 @@ class _TableSetupSheetState extends State<TableSetupSheet> {
             selectedPlayerId: _selectedPlayerId,
             playerNames: widget.game.playerNames,
             onSeatTap: _onSeatTap,
-            onSeatLongPress: (occupantId) => _setDealer(occupantId),
+            onSeatLongPress: (occupantId) => _onSeatLongPress(occupantId),
           ),
 
           const SizedBox(height: 20),
@@ -237,7 +325,7 @@ class _TableSetupSheetState extends State<TableSetupSheet> {
                   Text(
                     _selectedPlayerId != null
                         ? '— tap a seat to place'
-                        : '— tap a player to select',
+                        : '— tap to select, hold to remove',
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       color: AppColors.onSurfaceVariant.withValues(alpha: 0.55),
@@ -255,8 +343,10 @@ class _TableSetupSheetState extends State<TableSetupSheet> {
                 children: _unassignedPlayers.map((uid) {
                   final name = widget.game.playerNames[uid] ?? uid;
                   final isSelected = _selectedPlayerId == uid;
+                  final isRemovable = uid != widget.game.hostId;
                   return GestureDetector(
                     onTap: () => _onPlayerTap(uid),
+                    onLongPress: isRemovable ? () => _removePlayer(uid) : null,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       margin: const EdgeInsets.only(right: 10),

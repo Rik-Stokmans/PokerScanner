@@ -448,6 +448,31 @@ class FirestoreService {
     });
   }
 
+  /// Remove a player (human or bot) from the game entirely.
+  /// Also clears any seat assignment for that player.
+  static Future<void> removePlayerFromGame(
+      String gameId, String playerId) async {
+    await _db.collection('games').doc(gameId).update({
+      'playerIds': FieldValue.arrayRemove([playerId]),
+      'playerNames.$playerId': FieldValue.delete(),
+      'playerStacks.$playerId': FieldValue.delete(),
+      'playerBets.$playerId': FieldValue.delete(),
+      'playerHands.$playerId': FieldValue.delete(),
+      'stacksAtHandStart.$playerId': FieldValue.delete(),
+    });
+    // Remove from seatAssignments (requires reading current state since keys are dynamic)
+    final doc = await _db.collection('games').doc(gameId).get();
+    final data = doc.data();
+    if (data == null) return;
+    final seats = Map<String, dynamic>.from(
+        (data['seatAssignments'] as Map?)?.cast<String, dynamic>() ?? {});
+    seats.removeWhere((_, v) => v == playerId);
+    await _db
+        .collection('games')
+        .doc(gameId)
+        .update({'seatAssignments': seats});
+  }
+
   static Future<void> showHandInGame(String gameId, String playerId) =>
       _db.collection('games').doc(gameId).update({
         'shownHandPlayerIds': FieldValue.arrayUnion([playerId]),
