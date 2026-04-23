@@ -15,6 +15,12 @@ import 'screens/invite_friends_screen.dart';
 import 'screens/learn_screen.dart';
 import 'screens/deck_management_screen.dart';
 import 'screens/deck_registration_screen.dart';
+import 'screens/range_trainer_screen.dart';
+import 'screens/pot_odds_drill_screen.dart';
+import 'screens/scenario_drill_screen.dart';
+import 'screens/board_texture_drill_screen.dart';
+import 'screens/hand_review_quiz_screen.dart';
+import 'screens/concept_detail_screen.dart';
 import 'widgets/main_scaffold.dart';
 
 // Bridges Firebase auth state to go_router's refreshListenable
@@ -97,6 +103,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final deckId = state.uri.queryParameters['deckId'];
           return DeckRegistrationScreen(deckId: deckId);
+        },
+      ),
+      // ─── Learn sub-routes (no bottom nav) ──────────────────────────────
+      GoRoute(
+        path: '/learn/range-trainer',
+        builder: (context, state) => const RangeTrainerScreen(),
+      ),
+      GoRoute(
+        path: '/learn/pot-odds',
+        builder: (context, state) => const PotOddsDrillScreen(),
+      ),
+      GoRoute(
+        path: '/learn/scenarios',
+        builder: (context, state) => const ScenarioDrillScreen(),
+      ),
+      GoRoute(
+        path: '/learn/board-texture',
+        builder: (context, state) => const BoardTextureDrillScreen(),
+      ),
+      GoRoute(
+        path: '/learn/hand-review',
+        builder: (context, state) => const HandReviewQuizScreen(),
+      ),
+      GoRoute(
+        path: '/learn/concept/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return ConceptDetailScreen(conceptId: id);
         },
       ),
     ],

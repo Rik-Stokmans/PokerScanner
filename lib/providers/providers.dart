@@ -9,6 +9,8 @@ import '../models/friendship_model.dart';
 import '../models/deck_model.dart';
 import '../services/firestore_service.dart';
 import '../services/ble_service.dart';
+import '../services/learning_service.dart';
+import '../models/learning_progress_model.dart';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────
 
@@ -431,4 +433,21 @@ final handFavoritesProvider =
     final favoritedBy = (data['favoritedBy'] as List?)?.cast<String>() ?? [];
     return favoritedBy.contains(uid);
   });
+});
+
+// ─── Learning Progress ────────────────────────────────────────────────────
+
+/// Live stream of the current user's learning progress.
+/// Falls back to [LearningProgressModel.empty] while loading or on error.
+final learningProgressProvider =
+    StreamProvider<LearningProgressModel>((ref) {
+  final userAsync = ref.watch(currentUserProvider);
+  return userAsync.when(
+    data: (user) {
+      if (user == null) return Stream.value(LearningProgressModel.empty(''));
+      return LearningService.streamProgress(user.id);
+    },
+    loading: () => Stream.value(LearningProgressModel.empty('')),
+    error: (_, __) => Stream.value(LearningProgressModel.empty('')),
+  );
 });
