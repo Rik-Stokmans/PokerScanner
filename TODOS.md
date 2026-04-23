@@ -106,40 +106,40 @@ flutter: #1      MethodChannelQuery.snapshots.<anonymous closure> (package:cloud
 
 ### Stats & Metrics
 
-- [ ] **Win rate % display** — add a prominent win rate percentage (wins / total hands) to the Session P&L card alongside bb/100, using the same `_MiniStat` widget.
+- [x] **Win rate % display** — add a prominent win rate percentage (wins / total hands) to the Session P&L card alongside bb/100, using the same `_MiniStat` widget.
 
-- [ ] **Showdown vs. non-showdown win rate** — add a `SessionStats` breakdown of `showdownWins` / `showdownHands` vs `nonShowdownWins` / `nonShowdownHands`. Display as two `_MiniStat`-style tiles in a new "Win Breakdown" card. Flag if non-showdown win rate is unusually high (>70%) or low (<30%).
+- [x] **Showdown vs. non-showdown win rate** — add a `SessionStats` breakdown of `showdownWins` / `showdownHands` vs `nonShowdownWins` / `nonShowdownHands`. Display as two `_MiniStat`-style tiles in a new "Win Breakdown" card. Flag if non-showdown win rate is unusually high (>70%) or low (<30%).
 
-- [ ] **Biggest pots won vs. lost** — replace "Recent Winners" with a two-tab "Notable Hands" section (Won / Lost). The Losses tab shows the 3 biggest losing hands derived from `playerStacksBefore` delta or pot amount when the user did not win. Use the existing `_ErrorCard` widget with `isWin: false`.
+- [x] **Biggest pots won vs. lost** — replace "Recent Winners" with a two-tab "Notable Hands" section (Won / Lost). The Losses tab shows the 3 biggest losing hands derived from `playerStacksBefore` delta or pot amount when the user did not win. Use the existing `_ErrorCard` widget with `isWin: false`.
 
-- [ ] **Hand rank frequency** — add a "Hand Strength" section showing how often you won with each `handRank` (pair, two pair, flush, etc.). Display as a scrollable row of pill/badge widgets, each showing the rank label and count, coloured by rarity.
+- [x] **Hand rank frequency** — add a "Hand Strength" section showing how often you won with each `handRank` (pair, two pair, flush, etc.). Display as a scrollable row of pill/badge widgets, each showing the rank label and count, coloured by rarity.
 
 ### Leak Detection & Insights
 
-- [ ] **VPIP approximation** — compute VPIP from hands where the user's `playerStacksBefore` decreased by more than the big blind amount (indicating voluntary money in pot). Add to `SessionStats` as `vpip` (double 0–1). Display as a `_MiniStat` with a warning colour if > 0.30.
+- [x] **VPIP approximation** — compute VPIP from hands where the user's `playerStacksBefore` decreased by more than the big blind amount (indicating voluntary money in pot). Add to `SessionStats` as `vpip` (double 0–1). Display as a `_MiniStat` with a warning colour if > 0.30.
 
-- [ ] **Leak detector alerts** — add a `List<String> leakWarnings` field to `SessionStats`. Populate with rule-based alerts computed in `sessionAnalysisProvider`:
+- [x] **Leak detector alerts** — add a `List<String> leakWarnings` field to `SessionStats`. Populate with rule-based alerts computed in `sessionAnalysisProvider`:
   - Lost 4+ of the last 5 hands
   - Won 0 showdowns in the last 8 showdown hands
   - Net loss from BB position exceeds 3× the big blind
   Display each warning as a red-bordered alert card below the AI Insight box (reuse the insight card style with `AppColors.error` accent).
 
-- [ ] **Upgrade AI Insight to be dynamic** — replace the hardcoded two-branch string with a multi-condition function in `SessionStats` that selects the most relevant insight based on win rate, bb/100, VPIP, and leak warnings. Return a plain `String get aiInsight`.
+- [x] **Upgrade AI Insight to be dynamic** — replace the hardcoded two-branch string with a multi-condition function in `SessionStats` that selects the most relevant insight based on win rate, bb/100, VPIP, and leak warnings. Return a plain `String get aiInsight`.
 
 ### Visualisation
 
-- [ ] **Stack trajectory mini-chart** — add a simple line chart below the Session P&L card showing cumulative P&L over hand number. Compute the series in `sessionAnalysisProvider` as `List<({int hand, double pnl})> stackSeries`. Use `fl_chart` (already in `pubspec.yaml` if present, otherwise add it) with a `LineChart` widget; style it to match the dark theme.
+- [x] **Stack trajectory mini-chart** — add a simple line chart below the Session P&L card showing cumulative P&L over hand number. Compute the series in `sessionAnalysisProvider` as `List<({int hand, double pnl})> stackSeries`. Use `fl_chart` (already in `pubspec.yaml` if present, otherwise add it) with a `LineChart` widget; style it to match the dark theme.
 
-- [ ] **Positional edge bar visualisation** — replace the plain text list in "Positional Edge" with a horizontal bar chart row per position. Each bar fills proportionally to the largest absolute value; positive bars use `AppColors.primary`, negative use `AppColors.error`.
+- [x] **Positional edge bar visualisation** — replace the plain text list in "Positional Edge" with a horizontal bar chart row per position. Each bar fills proportionally to the largest absolute value; positive bars use `AppColors.primary`, negative use `AppColors.error`.
 
 ### Cross-session & Opponent Data
 
-- [ ] **Opponent tendencies card** — add an "Opponents" section using `playerNames` from `activeGameHandsProvider`. For each opponent compute win rate this session and sort descending. Display as a compact list card (opponent name, wins/hands, win%). Helps identify who is running hot.
+- [x] **Opponent tendencies card** — add an "Opponents" section using `playerNames` from `activeGameHandsProvider`. For each opponent compute win rate this session and sort descending. Display as a compact list card (opponent name, wins/hands, win%). Helps identify who is running hot.
 
-- [ ] **Multi-session comparison** — use `userRecentHandsProvider` (already exists) to compute all-time average bb/100 and win rate. Show a "vs. your average" delta badge next to the current session bb/100 (`_MiniStat` subtext or small coloured arrow).
+- [x] **Multi-session comparison** — use `userRecentHandsProvider` (already exists) to compute all-time average bb/100 and win rate. Show a "vs. your average" delta badge next to the current session bb/100 (`_MiniStat` subtext or small coloured arrow).
 
 ### Interactivity
 
-- [ ] **Tappable hand rank items** — make each item in the hand rank frequency row tappable; navigate to a filtered history view showing only hands of that rank.
+- [x] **Tappable hand rank items** — make each item in the hand rank frequency row tappable; navigate to a filtered history view showing only hands of that rank.
 
-- [ ] **Wire up "Start Training Drill" button** — decide on a target screen (e.g. hand replayer or a quiz flow) and connect `GradientButton` `onPressed` to navigate there via `go_router`.
+- [x] **Wire up "Start Training Drill" button** — decide on a target screen (e.g. hand replayer or a quiz flow) and connect `GradientButton` `onPressed` to navigate there via `go_router`.
