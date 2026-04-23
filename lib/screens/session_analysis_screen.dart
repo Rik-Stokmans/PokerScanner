@@ -180,61 +180,10 @@ class SessionAnalysisScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Winning hands section
-              Text('Recent Winners',
-                  style: GoogleFonts.manrope(
-                    fontSize: 18, fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
-                  )),
-              const SizedBox(height: 12),
-              handsAsync.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                ),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (hands) {
-                  if (hands.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text('No hands recorded yet',
-                          style: GoogleFonts.inter(
-                            fontSize: 13, color: AppColors.onSurfaceVariant,
-                          )),
-                    );
-                  }
-                  final myWins = hands
-                      .where((h) => h.winnerId == user?.id)
-                      .take(3)
-                      .toList();
-                  if (myWins.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text('No wins yet — keep playing!',
-                          style: GoogleFonts.inter(
-                            fontSize: 13, color: AppColors.onSurfaceVariant,
-                          )),
-                    );
-                  }
-                  return Column(
-                    children: myWins.map((hand) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _ErrorCard(
-                        type: hand.handRank,
-                        handId: 'Hand #${hand.handNumber}',
-                        metric: '+€${hand.potAmount.toStringAsFixed(2)}',
-                        isWin: true,
-                      ),
-                    )).toList(),
-                  );
-                },
+              // Notable Hands section (Won / Lost tabs)
+              _NotableHandsSection(
+                handsAsync: handsAsync,
+                userId: user?.id ?? '',
               ),
               const SizedBox(height: 10),
 
@@ -319,6 +268,138 @@ class _MiniStat extends StatelessWidget {
               fontSize: 16, fontWeight: FontWeight.w700,
               color: valueColor ?? AppColors.onSurface,
             )),
+      ],
+    );
+  }
+}
+
+class _NotableHandsSection extends StatefulWidget {
+  final AsyncValue<List<HandModel>> handsAsync;
+  final String userId;
+
+  const _NotableHandsSection({required this.handsAsync, required this.userId});
+
+  @override
+  State<_NotableHandsSection> createState() => _NotableHandsSectionState();
+}
+
+class _NotableHandsSectionState extends State<_NotableHandsSection>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Widget _emptyState(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(message,
+          style: GoogleFonts.inter(
+            fontSize: 13, color: AppColors.onSurfaceVariant,
+          )),
+    );
+  }
+
+  Widget _buildWonTab(List<HandModel> hands) {
+    final myWins = hands
+        .where((h) => h.winnerId == widget.userId)
+        .toList()
+      ..sort((a, b) => b.potAmount.compareTo(a.potAmount));
+    final top3 = myWins.take(3).toList();
+    if (top3.isEmpty) return _emptyState('No wins yet — keep playing!');
+    return Column(
+      children: top3.map((hand) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _ErrorCard(
+          type: hand.handRank,
+          handId: 'Hand #${hand.handNumber}',
+          metric: '+€${hand.potAmount.toStringAsFixed(2)}',
+          isWin: true,
+        ),
+      )).toList(),
+    );
+  }
+
+  Widget _buildLostTab(List<HandModel> hands) {
+    final myId = widget.userId;
+    // Hands where user played (has stack entry) but did not win
+    final losses = hands
+        .where((h) => h.winnerId != myId && h.playerStacksBefore.containsKey(myId))
+        .toList()
+      ..sort((a, b) => b.potAmount.compareTo(a.potAmount));
+    final top3 = losses.take(3).toList();
+    if (top3.isEmpty) return _emptyState('No losses recorded yet — great run!');
+    return Column(
+      children: top3.map((hand) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _ErrorCard(
+          type: hand.handRank.isNotEmpty ? hand.handRank : 'Folded / Lost',
+          handId: 'Hand #${hand.handNumber}',
+          metric: '-€${hand.potAmount.toStringAsFixed(2)}',
+          isWin: false,
+        ),
+      )).toList(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Notable Hands',
+            style: GoogleFonts.manrope(
+              fontSize: 18, fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            )),
+        const SizedBox(height: 12),
+        TabBar(
+          controller: _tabController,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.onSurfaceVariant,
+          indicatorColor: AppColors.primary,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: GoogleFonts.inter(
+            fontSize: 13, fontWeight: FontWeight.w600,
+          ),
+          tabs: const [
+            Tab(text: 'Won'),
+            Tab(text: 'Lost'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        widget.handsAsync.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (hands) {
+            if (hands.isEmpty) return _emptyState('No hands recorded yet');
+            return AnimatedBuilder(
+              animation: _tabController,
+              builder: (context, _) {
+                if (_tabController.index == 0) {
+                  return _buildWonTab(hands);
+                } else {
+                  return _buildLostTab(hands);
+                }
+              },
+            );
+          },
+        ),
       ],
     );
   }
