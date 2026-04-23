@@ -237,99 +237,86 @@ class _DeckTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isIncomplete = !deck.isComplete;
-    final progress = deck.mappedCount / 52;
+    final isInUse = deck.assignedTableId != null;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(14),
-        border: isIncomplete
+        border: isInUse
             ? Border.all(
-                color: AppColors.tertiary.withOpacity(0.4), width: 1)
+                color: AppColors.primary.withValues(alpha: 0.25), width: 1)
             : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      deck.name,
-                      style: GoogleFonts.manrope(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      isIncomplete
-                          ? '${deck.mappedCount}/52 cards · incomplete'
-                          : '52/52 cards · complete',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: isIncomplete
-                            ? AppColors.tertiary
-                            : AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _OverflowMenu(
-                deck: deck,
-                scannerConnected: scannerConnected,
-              ),
-            ],
-          ),
-          if (isIncomplete) ...[
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: AppColors.surfaceContainerHighest,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.tertiary),
-                minHeight: 4,
-              ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isInUse
+                  ? AppColors.primary.withValues(alpha: 0.12)
+                  : AppColors.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.play_arrow,
-                    color: AppColors.primary, size: 16),
-                label: Text(
-                  'Resume registration',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: scannerConnected
-                        ? AppColors.primary
-                        : AppColors.onSurfaceVariant,
+            child: Icon(
+              isInUse ? Icons.link : Icons.style_outlined,
+              color: isInUse
+                  ? AppColors.primary
+                  : AppColors.onSurfaceVariant,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  deck.name,
+                  style: GoogleFonts.manrope(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
                   ),
                 ),
-                onPressed: scannerConnected
-                    ? () => context
-                        .push('/decks/register?deckId=${deck.id}')
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(
-                      color: AppColors.primary.withOpacity(0.4), width: 1),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-              ),
+                const SizedBox(height: 3),
+                if (isInUse)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'In use at table',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    'Available',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
+          if (!isInUse)
+            _OverflowMenu(
+              deck: deck,
+              scannerConnected: scannerConnected,
+            )
+          else
+            const SizedBox(width: 8),
         ],
       ),
     );
@@ -396,58 +383,10 @@ class _OverflowMenu extends ConsumerWidget {
   }
 
   Future<void> _showRenameDialog(BuildContext context) async {
-    final controller = TextEditingController(text: deck.name);
     final result = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerHigh,
-        title: Text(
-          'Rename deck',
-          style: GoogleFonts.manrope(
-              fontWeight: FontWeight.w700, color: AppColors.onSurface),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style:
-              GoogleFonts.inter(fontSize: 16, color: AppColors.onSurface),
-          decoration: InputDecoration(
-            hintText: 'Deck name',
-            hintStyle: GoogleFonts.inter(
-                fontSize: 16, color: AppColors.onSurfaceVariant),
-            filled: true,
-            fillColor: AppColors.surfaceContainerHighest,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                  color: AppColors.primary.withOpacity(0.6),
-                  width: 1.5),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cancel',
-                style: GoogleFonts.inter(
-                    color: AppColors.onSurfaceVariant)),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.of(context).pop(controller.text.trim()),
-            child: Text('Save',
-                style: GoogleFonts.inter(color: AppColors.primary)),
-          ),
-        ],
-      ),
+      builder: (_) => _RenameDeckDialog(initialName: deck.name),
     );
-    controller.dispose();
     if (result != null && result.isNotEmpty) {
       await FirestoreService.updateDeckName(deck.id, result);
     }
@@ -490,3 +429,77 @@ class _OverflowMenu extends ConsumerWidget {
 }
 
 enum _DeckAction { rename, delete }
+
+// ── Rename dialog — owns its own TextEditingController lifecycle ───────────
+
+class _RenameDeckDialog extends StatefulWidget {
+  final String initialName;
+  const _RenameDeckDialog({required this.initialName});
+
+  @override
+  State<_RenameDeckDialog> createState() => _RenameDeckDialogState();
+}
+
+class _RenameDeckDialogState extends State<_RenameDeckDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surfaceContainerHigh,
+      title: Text(
+        'Rename deck',
+        style: GoogleFonts.manrope(
+            fontWeight: FontWeight.w700, color: AppColors.onSurface),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        style: GoogleFonts.inter(fontSize: 16, color: AppColors.onSurface),
+        decoration: InputDecoration(
+          hintText: 'Deck name',
+          hintStyle:
+              GoogleFonts.inter(fontSize: 16, color: AppColors.onSurfaceVariant),
+          filled: true,
+          fillColor: AppColors.surfaceContainerHighest,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: AppColors.primary.withValues(alpha: 0.6), width: 1.5),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Cancel',
+              style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.of(context).pop(_controller.text.trim()),
+          child:
+              Text('Save', style: GoogleFonts.inter(color: AppColors.primary)),
+        ),
+      ],
+    );
+  }
+}

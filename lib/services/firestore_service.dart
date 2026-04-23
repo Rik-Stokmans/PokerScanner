@@ -64,9 +64,6 @@ class FirestoreService {
     double bigBlind = 0.10,
     int maxPlayers = 9,
   }) async {
-    final deck = CardModel.shuffledDeck();
-    final hostCards = [deck[0], deck[1]];
-
     final game = GameModel(
       id: '',
       name: name,
@@ -81,7 +78,7 @@ class FirestoreService {
       currentRound: BettingRound.preflop,
       communityCards: [],
       currentTurnPlayerId: hostId,
-      playerHands: {hostId: hostCards},
+      playerHands: {hostId: []},
       playerBets: {hostId: bigBlind},
       playerStacks: {hostId: 100.0},
       foldedPlayers: [],
@@ -125,6 +122,50 @@ class FirestoreService {
     });
   }
 
+  /// Start a new hand in scanner mode — bot players are auto-dealt random
+  /// cards, human players get empty hands to be filled by the physical scanner.
+  static Future<void> startNewHandForScanner(
+      String gameId, GameModel game) async {
+    final deck = CardModel.shuffledDeck();
+    int cardIndex = 0;
+    final hands = <String, List<CardModel>>{};
+    for (final uid in game.playerIds) {
+      if (uid.startsWith('bot_')) {
+        hands[uid] = [deck[cardIndex++], deck[cardIndex++]];
+      } else {
+        hands[uid] = [];
+      }
+    }
+
+    // Advance dealer button to the next player in turn order.
+    String? newDealerPlayerId;
+    if (game.playerIds.isNotEmpty) {
+      final currentIdx = game.dealerPlayerId != null
+          ? game.playerIds.indexOf(game.dealerPlayerId!)
+          : -1;
+      newDealerPlayerId = currentIdx >= 0
+          ? game.playerIds[(currentIdx + 1) % game.playerIds.length]
+          : game.playerIds.first;
+    }
+
+    await _db.collection('games').doc(gameId).update({
+      'playerHands': hands.map(
+        (uid, cards) => MapEntry(uid, cards.map((c) => c.toMap()).toList()),
+      ),
+      'communityCards': [],
+      'currentRound': BettingRound.preflop.name,
+      'pot': game.bigBlind,
+      'playerBets': {for (final uid in game.playerIds) uid: 0.0},
+      'foldedPlayers': [],
+      'shownHandPlayerIds': [],
+      'currentTurnPlayerId': game.playerIds.first,
+      'handCount': game.handCount + 1,
+      'stacksAtHandStart': game.playerStacks,
+      'handOver': false,
+      if (newDealerPlayerId != null) 'dealerPlayerId': newDealerPlayerId,
+    });
+  }
+
   static Future<void> playerCheck(String gameId, GameModel game, String uid) =>
       _advanceTurn(gameId, game, uid);
 
@@ -162,8 +203,10 @@ class FirestoreService {
     final highBet =
         game.playerBets.values.fold<double>(0, (a, b) => a > b ? a : b);
     final myBet = game.playerBets[uid] ?? 0;
-    // Raise must bring total to at least 2× the current high bet
-    if (highBet > 0 && (myBet + amount) < highBet * 2) return;
+    final total = myBet + amount;
+    // A raise (total > highBet) must be at least 2× the current high bet.
+    // A call (total == highBet) is always allowed without this restriction.
+    if (highBet > 0 && total > highBet && total < highBet * 2) return;
 
     final newPot = game.pot + amount;
     final newBets = Map<String, double>.from(game.playerBets);
@@ -300,7 +343,6 @@ class FirestoreService {
       {List<String>? foldedPlayers,
       bool wasShowdown = false,
       List<String> revealedPlayerIds = const []}) async {
-    final currentFolded = foldedPlayers ?? game.foldedPlayers;
     final winnerName = game.playerNames[winnerId] ?? 'Unknown';
 
     // Evaluate winner's hand for description
@@ -308,11 +350,13 @@ class FirestoreService {
     final allCards = [...hole, ...game.communityCards];
     final result = HandEvaluator.evaluate(allCards);
 
-    // Add pot to winner's stack
+    // Add pot to winner's stack and mark the hand as over so players can
+    // optionally show their cards before the host starts the next round.
     final newStacks = Map<String, double>.from(game.playerStacks);
     newStacks[winnerId] = (newStacks[winnerId] ?? 0) + game.pot;
     await _db.collection('games').doc(gameId).update({
       'playerStacks': newStacks,
+      'handOver': true,
     });
 
     // Save hand to history
@@ -347,12 +391,21 @@ class FirestoreService {
       'totalHandsPlayed': FieldValue.increment(1),
     });
 
-    // Deal next hand
-    await dealNewHand(
-        gameId, game.copyWith(foldedPlayers: currentFolded, playerStacks: newStacks));
+    // Do NOT auto-start the next hand — the host manually triggers startNewHandForScanner
+    // so players have time to optionally show their cards first.
   }
 
   static Future<void> endGame(String gameId, String hostId) async {
+    // Clear the deck's table assignment if one was linked
+    final gameDoc = await _db.collection('games').doc(gameId).get();
+    final deckId = gameDoc.data()?['deckId'] as String?;
+    if (deckId != null) {
+      await _db
+          .collection('decks')
+          .doc(deckId)
+          .update({'assignedTableId': null});
+    }
+
     await _db.collection('games').doc(gameId).update({
       'status': GameStatus.completed.name,
     });
@@ -611,9 +664,12 @@ class FirestoreService {
   static Stream<List<DeckModel>> getUserDecksStream(String ownerId) => _db
       .collection('decks')
       .where('ownerId', isEqualTo: ownerId)
-      .orderBy('createdAt', descending: true)
       .snapshots()
-      .map((s) => s.docs.map((d) => DeckModel.fromMap(d.id, d.data())).toList());
+      .map((s) {
+        final decks = s.docs.map((d) => DeckModel.fromMap(d.id, d.data())).toList();
+        decks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return decks;
+      });
 
   /// Create a new deck document owned by [ownerId].
   static Future<DeckModel> createDeck({
@@ -678,6 +734,23 @@ class FirestoreService {
         .get();
     return {for (final d in snap.docs) d.id: d.data()['cardCode'] as String};
   }
+
+  /// Update the host's table layout: seat count, seat assignments, and dealer.
+  static Future<void> updateTableSetup({
+    required String gameId,
+    required int seatCount,
+    required Map<String, String> seatAssignments,
+    required String? dealerPlayerId,
+  }) =>
+      _db.collection('games').doc(gameId).update({
+        'maxPlayers': seatCount,
+        'seatAssignments': seatAssignments,
+        'dealerPlayerId': dealerPlayerId,
+      });
+
+  /// Set the deck linked to a game document.
+  static Future<void> setGameDeck(String gameId, String deckId) =>
+      _db.collection('games').doc(gameId).update({'deckId': deckId});
 
   /// Assign a deck to a table/game. Only the deck owner (host) should call
   /// this; the companion security rules enforce ownership on the server side.

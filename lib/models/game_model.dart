@@ -28,6 +28,11 @@ class GameModel {
   final DateTime createdAt;
   final Map<String, double> stacksAtHandStart; // uid → stack at start of current hand
   final String? deckId; // references a DeckModel; null when no scanner deck is linked
+  final bool handOver; // true after _resolveHand; cleared when next hand starts
+  /// Visual seat layout: seat index (0-based string key) → player ID.
+  final Map<String, String> seatAssignments;
+  /// Which player currently holds the dealer button (visual only, does not affect betting order).
+  final String? dealerPlayerId;
 
   const GameModel({
     required this.id,
@@ -52,6 +57,9 @@ class GameModel {
     required this.createdAt,
     this.stacksAtHandStart = const {},
     this.deckId,
+    this.handOver = false,
+    this.seatAssignments = const {},
+    this.dealerPlayerId,
   });
 
   int get playerCount => playerIds.length;
@@ -90,6 +98,9 @@ class GameModel {
         'createdAt': Timestamp.fromDate(createdAt),
         'stacksAtHandStart': stacksAtHandStart,
         if (deckId != null) 'deckId': deckId,
+        'handOver': handOver,
+        'seatAssignments': seatAssignments,
+        if (dealerPlayerId != null) 'dealerPlayerId': dealerPlayerId,
       };
 
   factory GameModel.fromMap(String id, Map<String, dynamic> map) {
@@ -128,6 +139,11 @@ class GameModel {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       stacksAtHandStart: stacksAtHandStartRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
       deckId: map['deckId'] as String?,
+      handOver: map['handOver'] as bool? ?? false,
+      seatAssignments: (map['seatAssignments'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v as String)) ??
+          const {},
+      dealerPlayerId: map['dealerPlayerId'] as String?,
     );
   }
 }

@@ -10,8 +10,11 @@ import '../providers/providers.dart';
 import '../services/firestore_service.dart';
 import '../services/bot_service.dart';
 import '../services/scanner_service.dart';
+import '../services/ble_service.dart';
 import '../models/card_model.dart';
 import '../models/game_model.dart';
+import 'table_setup_sheet.dart';
+import 'connect_deck_sheet.dart';
 
 class PokerTableScreen extends ConsumerStatefulWidget {
   const PokerTableScreen({super.key});
@@ -21,42 +24,12 @@ class PokerTableScreen extends ConsumerStatefulWidget {
 }
 
 class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
-  double _betAmount = 0.25;
-  Timer? _subtractTimer;
   final _botService = BotService();
-
-  void _startSubtractingBet(double amount, double minBet, double maxBet) {
-    _subtractTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      setState(() => _betAmount = (_betAmount - amount).clamp(minBet, maxBet));
-    });
-  }
-
-  void _stopSubtractingBet() {
-    _subtractTimer?.cancel();
-    _subtractTimer = null;
-  }
 
   @override
   void dispose() {
-    _subtractTimer?.cancel();
     _botService.dispose();
     super.dispose();
-  }
-
-  Future<void> _check(GameModel game, String uid) async {
-    await FirestoreService.playerCheck(game.id, game, uid);
-  }
-
-  Future<void> _call(GameModel game, String uid) async {
-    await FirestoreService.playerCall(game.id, game, uid);
-  }
-
-  Future<void> _fold(GameModel game, String uid) async {
-    await FirestoreService.playerFold(game.id, game, uid);
-  }
-
-  Future<void> _bet(GameModel game, String uid) async {
-    await FirestoreService.playerBet(game.id, game, uid, _betAmount);
   }
 
   void _showEditStackDialog(BuildContext context, GameModel game, String uid, double currentStack) {
@@ -162,21 +135,25 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
 
     final isMyTurn = game.currentTurnPlayerId == user.id;
     final hasFolded = game.foldedPlayers.contains(user.id);
-    final maxBet = (game.playerStacks[user.id] ?? 100.0);
+    final myStack = game.playerStacks[user.id] ?? 100.0;
     final highBet = game.playerBets.values.fold<double>(0, (a, b) => a > b ? a : b);
     final myBet = game.playerBets[user.id] ?? 0;
-    final callAmount = (highBet - myBet).clamp(0, maxBet);
+    final callAmount = (highBet - myBet).clamp(0.0, myStack);
     final isFacingBet = callAmount > 0;
-    final minRaiseAmount = isFacingBet ? (highBet * 2 - myBet).clamp(0, maxBet) : game.bigBlind;
+    final minRaiseAmount = (isFacingBet ? (highBet * 2 - myBet) : game.bigBlind).clamp(0.0, myStack);
+    final showActionBar = !game.handOver && !hasFolded && isMyTurn;
+    final showNewHandBar = game.handOver && game.hostId == user.id && game.deckId != null;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, (showActionBar || showNewHandBar) ? 110 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -237,6 +214,26 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                           );
                         }),
                       ],
+                      // Table setup button (host only)
+                      if (game.hostId == user.id)
+                        GestureDetector(
+                          onTap: () => showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => TableSetupSheet(game: game),
+                          ),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(Icons.table_restaurant_outlined,
+                                size: 18, color: AppColors.onSurfaceVariant),
+                          ),
+                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
@@ -299,28 +296,32 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                       children: [
                         // 5 community card placeholders
                         Expanded(
-                          child: Row(
-                            children: List.generate(5, (i) {
-                              final card = i < game.communityCards.length
-                                  ? game.communityCards[i]
-                                  : null;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: card != null
-                                    ? _CommunityCard(card: card)
-                                    : Container(
-                                        width: 44, height: 60,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.surfaceContainerHigh,
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(
-                                            color: AppColors.outlineVariant
-                                                .withValues(alpha: 0.2),
+                          child: FittedBox(
+                            alignment: Alignment.centerLeft,
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              children: List.generate(5, (i) {
+                                final card = i < game.communityCards.length
+                                    ? game.communityCards[i]
+                                    : null;
+                                return Padding(
+                                  padding: EdgeInsets.only(right: i < 4 ? 6 : 0),
+                                  child: card != null
+                                      ? _CommunityCard(card: card)
+                                      : Container(
+                                          width: 44, height: 60,
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surfaceContainerHigh,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: AppColors.outlineVariant
+                                                  .withValues(alpha: 0.2),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                              );
-                            }),
+                                );
+                              }),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -358,252 +359,28 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                               )),
                         ),
                       ),
-                    if (hasFolded)
-                      Builder(builder: (context) {
-                        final activePlayers = game.playerIds
-                            .where((id) => !game.foldedPlayers.contains(id))
-                            .length;
-                        final roundActive = activePlayers > 1;
-                        final handShown = game.shownHandPlayerIds.contains(user.id);
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Center(
-                            child: GestureDetector(
-                              onTap: handShown
-                                  ? null
-                                  : () async {
-                                      await FirestoreService.showHandInGame(
-                                          game.id, user.id);
-                                    },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: (handShown || roundActive)
-                                      ? AppColors.surfaceContainerHigh
-                                      : AppColors.primary.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: (handShown || roundActive)
-                                        ? AppColors.outlineVariant.withValues(alpha: 0.3)
-                                        : AppColors.primary.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      handShown
-                                          ? Icons.check_circle_outline
-                                          : roundActive
-                                              ? Icons.hourglass_empty
-                                              : Icons.visibility,
-                                      size: 14,
-                                      color: (handShown || roundActive)
-                                          ? AppColors.onSurfaceVariant
-                                          : AppColors.primary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      handShown
-                                          ? 'Hand Shown'
-                                          : roundActive
-                                              ? 'Show Hand After Round'
-                                              : 'Show Hand',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: (handShown || roundActive)
-                                            ? AppColors.onSurfaceVariant
-                                            : AppColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
                   ],
                 ),
               ),
 
               const SizedBox(height: 24),
 
-              // ── Scanner / Card Assignment Panel (host only) ──────────────
-              if (game.hostId == user.id)
-                _ScannerPanel(game: game),
+              // ── Your Hand ─────────────────────────────────────────────────
+              _MyHandPanel(game: game, userId: user.id),
+
+              // ── No deck connected banner ───────────────────────────────────
+              if (game.deckId == null) ...[
+                const SizedBox(height: 16),
+                _NoDeckBanner(game: game, userId: user.id),
+              ],
 
               const SizedBox(height: 24),
 
-              // Actions
-              if (!hasFolded && isMyTurn) ...[
-                Text('Actions',
-                    style: GoogleFonts.manrope(
-                      fontSize: 16, fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    )),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => isFacingBet
-                            ? _call(game, user.id)
-                            : _check(game, user.id),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Text(
-                                isFacingBet
-                                    ? 'CALL €${callAmount.toStringAsFixed(2)}'
-                                    : 'CHECK',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13, fontWeight: FontWeight.w700,
-                                  color: AppColors.onSurface, letterSpacing: 0.8,
-                                )),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _fold(game, user.id),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Text('FOLD',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13, fontWeight: FontWeight.w700,
-                                  color: AppColors.onSurfaceVariant,
-                                  letterSpacing: 0.8,
-                                )),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              // Waiting indicator when it's someone else's turn
+              if (!game.handOver && !isMyTurn && !hasFolded) ...[
                 const SizedBox(height: 20),
-                // Stack Management
-                GestureDetector(
-                  onTap: () => _showEditStackDialog(context, game, user.id, maxBet),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Your Stack',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12, fontWeight: FontWeight.w500,
-                                  color: AppColors.onSurfaceVariant, letterSpacing: 0.8,
-                                )),
-                            const SizedBox(height: 4),
-                            Text('€${maxBet.toStringAsFixed(2)}',
-                                style: GoogleFonts.manrope(
-                                  fontSize: 28, fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                )),
-                          ],
-                        ),
-                        const Spacer(),
-                        Icon(Icons.edit_outlined, size: 18, color: AppColors.onSurfaceVariant),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Place Bet / Raise
-                Text(isFacingBet ? 'Raise' : 'Place Bet',
-                    style: GoogleFonts.manrope(
-                      fontSize: 16, fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    )),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text('Min: €${minRaiseAmount.toStringAsFixed(2)}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12, color: AppColors.onSurfaceVariant,
-                        )),
-                    const Spacer(),
-                    Text('€${_betAmount.clamp(minRaiseAmount, maxBet).toStringAsFixed(2)}',
-                        style: GoogleFonts.manrope(
-                          fontSize: 20, fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        )),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    for (final amount in [0.05, 0.10, 0.25, 1.00])
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _betAmount = (_betAmount + amount).clamp(minRaiseAmount, maxBet).toDouble()),
-                          onLongPressStart: (_) => _startSubtractingBet(amount, minRaiseAmount.toDouble(), maxBet),
-                          onLongPressEnd: (_) => _stopSubtractingBet(),
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Text('+€${amount.toStringAsFixed(2)}',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11, fontWeight: FontWeight.w600,
-                                    color: AppColors.onSurfaceVariant,
-                                  )),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () => _bet(game, user.id),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryContainer],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text('BET  €${_betAmount.toStringAsFixed(2)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 14, fontWeight: FontWeight.w800,
-                            color: AppColors.onPrimary, letterSpacing: 1.5,
-                          )),
-                    ),
-                  ),
-                ),
-              ] else if (!isMyTurn && !hasFolded)
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(12),
@@ -612,7 +389,7 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const SizedBox(
-                        width: 14, height: 14,
+                        width: 13, height: 13,
                         child: CircularProgressIndicator(
                           strokeWidth: 2, color: AppColors.primary,
                         ),
@@ -627,333 +404,397 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                     ],
                   ),
                 ),
+              ],
             ],
           ),
         ),
       ),
-    );
-  }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Scanner / Card-Assignment Panel  (shown to the host only)
-// ─────────────────────────────────────────────────────────────────────────────
+          // ── Floating action bar ──────────────────────────────────────────
+          if (showActionBar)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: _ActionBar(
+                game: game,
+                userId: user.id,
+                isFacingBet: isFacingBet,
+                callAmount: callAmount,
+                minRaiseAmount: minRaiseAmount,
+                myStack: myStack,
+                onEditStack: () => _showEditStackDialog(context, game, user.id, myStack),
+              ),
+            ),
 
-/// Displays the live scanner state and lets the host route scanned (or
-/// manually-entered) cards into the correct destination:
-///
-///  * Pre-flop  → hole hands (host selects target player)
-///  * Flop/Turn/River → community cards (appended automatically)
-///
-/// When the scanner is offline a manual card-entry fallback is shown.
-class _ScannerPanel extends ConsumerStatefulWidget {
-  final GameModel game;
-  const _ScannerPanel({required this.game});
-
-  @override
-  ConsumerState<_ScannerPanel> createState() => _ScannerPanelState();
-}
-
-class _ScannerPanelState extends ConsumerState<_ScannerPanel> {
-  String? _selectedPlayerId;
-
-  // ─── Manual entry ──────────────────────────────────────────────────────────
-
-  void _showManualEntryDialog() {
-    showDialog(
-      context: context,
-      builder: (_) => _ManualCardEntryDialog(
-        onCard: (card) {
-          Navigator.pop(context);
-          _routeCard(card);
-        },
+          // ── Floating start new hand bar (host only) ───────────────────
+          if (showNewHandBar)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: _StartNewHandBar(
+                onTap: () => FirestoreService.startNewHandForScanner(game.id, game),
+              ),
+            ),
+        ],
       ),
     );
   }
+}
 
-  // ─── Routing ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// YOUR HAND panel — subscribes to BLE and auto-fills cards for this player
+// ─────────────────────────────────────────────────────────────────────────────
 
-  Future<void> _routeCard(CardModel card) async {
-    final game = widget.game;
-    if (game.currentRound == BettingRound.preflop) {
-      final targetId = _selectedPlayerId;
-      if (targetId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Select a player to assign the hole card to')),
-          );
-        }
-        return;
-      }
-      await FirestoreService.assignHoleCard(game.id, game, targetId, card);
-    } else {
-      await FirestoreService.assignCommunityCard(game.id, game, card);
-    }
+class _MyHandPanel extends ConsumerStatefulWidget {
+  final GameModel game;
+  final String userId;
 
-    // Consume the pending card from the scanner queue
-    ref.read(scannerServiceProvider.notifier).consumePending();
+  const _MyHandPanel({required this.game, required this.userId});
+
+  @override
+  ConsumerState<_MyHandPanel> createState() => _MyHandPanelState();
+}
+
+class _MyHandPanelState extends ConsumerState<_MyHandPanel> {
+  StreamSubscription<String>? _chipSub;
+  bool _revealed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _chipSub = BleService.instance.chipStream.listen(_onChipReceived);
+    _loadDeckIfNeeded(widget.game.deckId);
   }
 
-  // ─── Simulated scan trigger (demo helper for host) ─────────────────────────
+  @override
+  void didUpdateWidget(_MyHandPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.game.deckId != widget.game.deckId) {
+      _loadDeckIfNeeded(widget.game.deckId);
+    }
+    // Hide cards again when a new hand starts
+    if (oldWidget.game.handCount != widget.game.handCount) {
+      setState(() => _revealed = false);
+    }
+  }
 
-  /// Injects the next pending card from the scanner service into the game.
-  Future<void> _consumeNextPending() async {
-    final scanner = ref.read(scannerServiceProvider);
-    if (scanner.pendingCards.isEmpty) return;
-    await _routeCard(scanner.pendingCards.first);
+  @override
+  void dispose() {
+    _chipSub?.cancel();
+    super.dispose();
+  }
+
+  /// Strips the reader-slot prefix ("R1: " / "R2: ") emitted by the firmware
+  /// so both RFID reader slots resolve to the same chip UID key.
+  static String _normalizeChipId(String raw) {
+    final m = RegExp(r'R\d+:\s*(.+)', caseSensitive: false).firstMatch(raw.trim());
+    return (m?.group(1)?.trim() ?? raw.trim()).toUpperCase();
+  }
+
+  /// Auto-loads the deck's chip→card mapping from Firestore when the
+  /// in-memory deckMap is empty (e.g. after an app restart).
+  Future<void> _loadDeckIfNeeded(String? deckId) async {
+    if (deckId == null) return;
+    if (ref.read(scannerServiceProvider).deckMap.isNotEmpty) return;
+
+    try {
+      final mappings = await FirestoreService.getCardMappings(deckId);
+      if (!mounted) return;
+      final entries = mappings.entries.map((e) {
+        final parts = e.value.split('|');
+        return DeckEntry(
+          chipId: _normalizeChipId(e.key),
+          card: CardModel(rank: parts[0], suit: parts[1]),
+        );
+      }).toList();
+      ref.read(scannerServiceProvider.notifier).loadDeck(entries);
+    } catch (_) {}
+  }
+
+  Future<void> _onChipReceived(String rawChipId) async {
+    if (!mounted) return;
+    final chipId = _normalizeChipId(rawChipId);
+    final card = ref.read(scannerServiceProvider).deckMap[chipId];
+    if (card == null) return;
+
+    final game = widget.game;
+    final myCards = game.playerHands[widget.userId] ?? [];
+    if (myCards.length >= 2) return;
+    if (myCards.contains(card)) return;
+
+    await FirestoreService.assignHoleCard(game.id, game, widget.userId, card);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scanner = ref.watch(scannerServiceProvider);
     final game = widget.game;
-    final isPreflop = game.currentRound == BettingRound.preflop;
-    final humanPlayers = game.playerIds
-        .where((id) => !BotService.isBot(id))
-        .toList();
+    final myCards = game.playerHands[widget.userId] ?? [];
+    final isConnected = ref.watch(scannerConnectedProvider);
+    final hasCards = myCards.length == 2;
+    final handShown = game.shownHandPlayerIds.contains(widget.userId);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: scanner.isOnline
-              ? AppColors.primary.withValues(alpha: 0.3)
-              : AppColors.outlineVariant.withValues(alpha: 0.2),
-        ),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
+          // Header row with peek toggle
           Row(
             children: [
-              Icon(
-                Icons.contactless_outlined,
-                size: 16,
-                color: scanner.isOnline
-                    ? AppColors.primary
-                    : AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'CARD SCANNER',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.0,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
+              Text('YOUR HAND',
+                  style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w500,
+                    color: AppColors.onSurfaceVariant, letterSpacing: 0.8,
+                  )),
               const Spacer(),
-              // Toggle scanner online/offline (demo)
-              GestureDetector(
-                onTap: () => ref
-                    .read(scannerServiceProvider.notifier)
-                    .setOnline(!scanner.isOnline),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: scanner.isOnline
-                        ? AppColors.primary.withValues(alpha: 0.15)
-                        : AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: scanner.isOnline
-                          ? AppColors.primary.withValues(alpha: 0.4)
-                          : AppColors.outlineVariant.withValues(alpha: 0.2),
+              if (hasCards)
+                GestureDetector(
+                  onTap: () => setState(() => _revealed = !_revealed),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _revealed
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _revealed
+                            ? AppColors.primary.withValues(alpha: 0.3)
+                            : AppColors.outlineVariant.withValues(alpha: 0.2),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    scanner.isOnline ? 'Online' : 'Offline',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: scanner.isOnline
-                          ? AppColors.primary
-                          : AppColors.onSurfaceVariant,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _revealed ? Icons.visibility : Icons.visibility_off,
+                          size: 12,
+                          color: _revealed ? AppColors.primary : AppColors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _revealed ? 'Peek' : 'Hidden',
+                          style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600,
+                            color: _revealed ? AppColors.primary : AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 14),
 
-          // Pending scanned cards queue
-          if (scanner.pendingCards.isNotEmpty) ...[
-            Text(
-              'Pending',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.onSurfaceVariant,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: scanner.pendingCards.take(5).map((card) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _MiniCard(card: card),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Pre-flop: player selector
-          if (isPreflop) ...[
-            Text(
-              'Assign hole card to:',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: humanPlayers.map((pid) {
-                final name =
-                    game.playerNames[pid] ?? pid.substring(0, 6);
-                final isSelected = _selectedPlayerId == pid;
-                return GestureDetector(
-                  onTap: () =>
-                      setState(() => _selectedPlayerId = pid),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.primary.withValues(alpha: 0.15)
-                          : AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.primary.withValues(alpha: 0.5)
-                            : AppColors.outlineVariant
-                                .withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Text(
-                      name,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Action row: assign pending card + manual entry
+          // Card faces or card backs
           Row(
-            children: [
-              if (scanner.pendingCards.isNotEmpty)
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _consumeNextPending,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppColors.primary,
-                            AppColors.primaryContainer
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          isPreflop
-                              ? 'ASSIGN HOLE CARD'
-                              : 'PLACE ON BOARD',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onPrimary,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (scanner.pendingCards.isNotEmpty)
-                const SizedBox(width: 10),
-              // Manual entry fallback (always available)
-              Expanded(
-                child: GestureDetector(
-                  onTap: _showManualEntryDialog,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color:
-                            AppColors.outlineVariant.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.edit_outlined,
-                              size: 13, color: AppColors.onSurfaceVariant),
-                          const SizedBox(width: 5),
-                          Text(
-                            scanner.isOnline
-                                ? 'MANUAL ENTRY'
-                                : 'ENTER CARD',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurfaceVariant,
-                              letterSpacing: 0.8,
+            children: List.generate(2, (i) {
+              final card = i < myCards.length ? myCards[i] : null;
+              return Padding(
+                padding: EdgeInsets.only(right: i == 0 ? 10 : 0),
+                child: card != null && _revealed
+                    ? _HoleCard(card: card)
+                    : card != null
+                        ? _CardBack()
+                        : Container(
+                            width: 64, height: 88,
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppColors.outlineVariant.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Center(
+                              child: Icon(Icons.help_outline,
+                                  size: 22,
+                                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
                             ),
                           ),
-                        ],
+              );
+            }),
+          ),
+
+          // Show Hand button — only available when the hand is over
+          if (game.handOver && hasCards) ...[
+            const SizedBox(height: 14),
+            GestureDetector(
+              onTap: handShown
+                  ? null
+                  : () => FirestoreService.showHandInGame(game.id, widget.userId),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: handShown
+                      ? AppColors.surfaceContainerHigh
+                      : AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: handShown
+                        ? AppColors.outlineVariant.withValues(alpha: 0.2)
+                        : AppColors.primary.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        handShown ? Icons.check_circle_outline : Icons.visibility,
+                        size: 14,
+                        color: handShown ? AppColors.onSurfaceVariant : AppColors.primary,
                       ),
-                    ),
+                      const SizedBox(width: 6),
+                      Text(
+                        handShown ? 'Hand Shown' : 'Show Hand',
+                        style: GoogleFonts.inter(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          color: handShown ? AppColors.onSurfaceVariant : AppColors.primary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
 
-          if (!scanner.isOnline) ...[
-            const SizedBox(height: 10),
-            Row(
+          // Connect Scanner button when BLE is disconnected
+          if (!isConnected) ...[
+            const SizedBox(height: 14),
+            GestureDetector(
+              onTap: () => context.push('/scanner-setup'),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.outlineVariant.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bluetooth_searching,
+                          size: 14, color: AppColors.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Text('Connect Scanner',
+                          style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w600,
+                            color: AppColors.onSurfaceVariant,
+                          )),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// No deck connected banner
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _NoDeckBanner extends StatelessWidget {
+  final GameModel game;
+  final String userId;
+
+  const _NoDeckBanner({required this.game, required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final isHost = game.hostId == userId;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.style_outlined,
+                size: 20, color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline,
-                    size: 13,
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6)),
-                const SizedBox(width: 6),
                 Text(
-                  'Scanner offline — use manual entry to add cards',
+                  'No deck connected',
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isHost
+                      ? 'Connect a deck to start scanning cards'
+                      : 'Waiting for host to connect a deck',
                   style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color:
-                        AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
                   ),
                 ),
               ],
+            ),
+          ),
+          if (isHost) ...[
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => ConnectDeckSheet(
+                  gameId: game.id,
+                  userId: userId,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  'Connect',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
             ),
           ],
         ],
@@ -963,51 +804,64 @@ class _ScannerPanelState extends ConsumerState<_ScannerPanel> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Small card chip widget used in the pending-cards list
+// Floating Start New Hand bar (host only, shown when hand is over)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _MiniCard extends StatelessWidget {
-  final CardModel card;
-  const _MiniCard({required this.card});
+class _StartNewHandBar extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _StartNewHandBar({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return Container(
-      width: 36,
-      height: 48,
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottomPad),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(
-          color: AppColors.outlineVariant.withValues(alpha: 0.3),
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(
+            color: AppColors.outlineVariant.withValues(alpha: 0.15),
+            width: 1,
+          ),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              card.rank,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-                height: 1.0,
-              ),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.primary, AppColors.primaryContainer],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            Center(
-              child: Text(
-                card.suitSymbol,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: card.suitColor,
-                  height: 1.0,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.refresh, size: 16, color: AppColors.onPrimary),
+                const SizedBox(width: 8),
+                Text(
+                  'START NEW HAND',
+                  style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w800,
+                    color: AppColors.onPrimary, letterSpacing: 1.0,
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1015,188 +869,363 @@ class _MiniCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Manual card entry dialog  (offline fallback)
+// Floating 3-button action bar (Check/Call | Bet/Raise | Fold)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ManualCardEntryDialog extends StatefulWidget {
-  final void Function(CardModel) onCard;
-  const _ManualCardEntryDialog({required this.onCard});
+class _ActionBar extends StatelessWidget {
+  final GameModel game;
+  final String userId;
+  final bool isFacingBet;
+  final double callAmount;
+  final double minRaiseAmount;
+  final double myStack;
+  final VoidCallback onEditStack;
 
-  @override
-  State<_ManualCardEntryDialog> createState() => _ManualCardEntryDialogState();
-}
-
-class _ManualCardEntryDialogState extends State<_ManualCardEntryDialog> {
-  static const _ranks = [
-    '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'
-  ];
-  static const _suits = ['s', 'h', 'd', 'c'];
-  static const _suitLabels = {'s': '♠', 'h': '♥', 'd': '♦', 'c': '♣'};
-
-  String? _rank;
-  String? _suit;
+  const _ActionBar({
+    required this.game,
+    required this.userId,
+    required this.isFacingBet,
+    required this.callAmount,
+    required this.minRaiseAmount,
+    required this.myStack,
+    required this.onEditStack,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final canSubmit = _rank != null && _suit != null;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottomPad),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(
+            color: AppColors.outlineVariant.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Left — Check / Call
+          Expanded(
+            child: _ActionButton(
+              label: isFacingBet
+                  ? 'CALL\n€${callAmount.toStringAsFixed(2)}'
+                  : 'CHECK',
+              color: AppColors.surfaceContainerHigh,
+              textColor: AppColors.onSurface,
+              onTap: () => isFacingBet
+                  ? FirestoreService.playerCall(game.id, game, userId)
+                  : FirestoreService.playerCheck(game.id, game, userId),
+            ),
+          ),
+          const SizedBox(width: 10),
 
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      contentPadding: const EdgeInsets.all(24),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter Card Manually',
-              style: GoogleFonts.manrope(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
+          // Center — Bet / Raise (green, wider)
+          Expanded(
+            flex: 2,
+            child: _ActionButton(
+              label: isFacingBet ? 'RAISE' : 'BET',
+              color: const Color(0xFF2E7D32),
+              textColor: Colors.white,
+              onTap: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _BetSheet(
+                  game: game,
+                  userId: userId,
+                  isFacingBet: isFacingBet,
+                  minAmount: minRaiseAmount,
+                  maxAmount: myStack,
+                  onEditStack: onEditStack,
+                ),
               ),
             ),
-            const SizedBox(height: 20),
+          ),
+          const SizedBox(width: 10),
 
-            // Rank picker
-            Text('Rank',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                )),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: _ranks.map((r) {
-                final selected = _rank == r;
-                return GestureDetector(
-                  onTap: () => setState(() => _rank = r),
-                  child: Container(
-                    width: 40,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppColors.primary.withValues(alpha: 0.15)
-                          : AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: selected
-                            ? AppColors.primary.withValues(alpha: 0.5)
-                            : AppColors.outlineVariant.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        r,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.onSurface,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+          // Right — Fold
+          Expanded(
+            child: _ActionButton(
+              label: 'FOLD',
+              color: AppColors.surfaceContainerHigh,
+              textColor: AppColors.onSurfaceVariant,
+              onTap: () => FirestoreService.playerFold(game.id, game, userId),
             ),
-            const SizedBox(height: 16),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-            // Suit picker
-            Text('Suit',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
-                )),
-            const SizedBox(height: 8),
-            Row(
-              children: _suits.map((s) {
-                final selected = _suit == s;
-                final isRed = s == 'h' || s == 'd';
-                final suitColor = isRed
-                    ? const Color(0xFFE57373)
-                    : AppColors.onSurface;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final Color textColor;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.color,
+    required this.textColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w800,
+              color: textColor, letterSpacing: 0.6,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bet / Raise bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BetSheet extends StatefulWidget {
+  final GameModel game;
+  final String userId;
+  final bool isFacingBet;
+  final double minAmount;
+  final double maxAmount;
+  final VoidCallback onEditStack;
+
+  const _BetSheet({
+    required this.game,
+    required this.userId,
+    required this.isFacingBet,
+    required this.minAmount,
+    required this.maxAmount,
+    required this.onEditStack,
+  });
+
+  @override
+  State<_BetSheet> createState() => _BetSheetState();
+}
+
+class _BetSheetState extends State<_BetSheet> {
+  late double _amount;
+  Timer? _repeatTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = widget.minAmount;
+  }
+
+  @override
+  void dispose() {
+    _repeatTimer?.cancel();
+    super.dispose();
+  }
+
+  void _adjust(double delta) {
+    setState(() {
+      _amount = (_amount + delta).clamp(widget.minAmount, widget.maxAmount);
+    });
+  }
+
+  void _startRepeat(double delta) {
+    _repeatTimer = Timer.periodic(const Duration(milliseconds: 80), (_) => _adjust(delta));
+  }
+
+  void _stopRepeat() {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  Future<void> _place() async {
+    Navigator.pop(context);
+    await FirestoreService.playerBet(widget.game.id, widget.game, widget.userId, _amount);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final myStack = widget.game.playerStacks[widget.userId] ?? 0.0;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPad),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Title + stack
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                widget.isFacingBet ? 'RAISE' : 'BET',
+                style: GoogleFonts.manrope(
+                  fontSize: 18, fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface, letterSpacing: 1,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onEditStack();
+                },
+                child: Row(
+                  children: [
+                    Text(
+                      'Stack: €${myStack.toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 13, color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.edit_outlined,
+                        size: 14, color: AppColors.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Amount display
+          Center(
+            child: Text(
+              '€${_amount.toStringAsFixed(2)}',
+              style: GoogleFonts.manrope(
+                fontSize: 42, fontWeight: FontWeight.w800,
+                color: const Color(0xFF2E7D32),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'min €${widget.minAmount.toStringAsFixed(2)}',
+              style: GoogleFonts.inter(
+                fontSize: 12, color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Quick-add chips
+          Row(
+            children: [
+              for (final chip in [0.05, 0.10, 0.25, 1.00])
+                Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _suit = s),
+                    onTap: () => _adjust(chip),
+                    onLongPressStart: (_) => _startRepeat(chip),
+                    onLongPressEnd: (_) => _stopRepeat(),
                     child: Container(
-                      width: 52,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? suitColor.withValues(alpha: 0.12)
-                            : AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: selected
-                              ? suitColor.withValues(alpha: 0.5)
-                              : AppColors.outlineVariant.withValues(alpha: 0.2),
-                        ),
+                        color: AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
                         child: Text(
-                          _suitLabels[s]!,
-                          style: TextStyle(
-                            fontSize: 20,
-                            color: selected ? suitColor : AppColors.onSurfaceVariant,
+                          '+€${chip.toStringAsFixed(2)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600,
+                            color: AppColors.onSurfaceVariant,
                           ),
                         ),
                       ),
                     ),
                   ),
-                );
-              }).toList(),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // All-in shortcut
+          GestureDetector(
+            onTap: () => setState(() => _amount = widget.maxAmount),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(
+                  'ALL IN  €${widget.maxAmount.toStringAsFixed(2)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700,
+                    color: AppColors.onSurfaceVariant, letterSpacing: 0.5,
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 16),
 
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    child: Text('Cancel',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurfaceVariant,
-                        )),
+          // Place bet button
+          GestureDetector(
+            onTap: _place,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E7D32),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Center(
+                child: Text(
+                  '${widget.isFacingBet ? 'RAISE' : 'BET'}  €${_amount.toStringAsFixed(2)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 15, fontWeight: FontWeight.w800,
+                    color: Colors.white, letterSpacing: 1.0,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: canSubmit
-                        ? () => widget.onCard(
-                            CardModel(rank: _rank!, suit: _suit!))
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      minimumSize: const Size(double.infinity, 48),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text('Add Card',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onPrimary,
-                        )),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1401,6 +1430,77 @@ class _EditStackDialogState extends State<_EditStackDialog> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HoleCard extends StatelessWidget {
+  final CardModel card;
+  const _HoleCard({required this.card});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64, height: 88,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(card.rank,
+                style: GoogleFonts.inter(
+                  fontSize: 16, fontWeight: FontWeight.w800,
+                  color: card.suitColor, height: 1.0,
+                )),
+            Center(
+              child: Text(card.suitSymbol,
+                  style: TextStyle(fontSize: 26, color: card.suitColor, height: 1.0)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CardBack extends StatelessWidget {
+  const _CardBack();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64, height: 88,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.lock_outline,
+          size: 20,
+          color: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
         ),
       ),
     );

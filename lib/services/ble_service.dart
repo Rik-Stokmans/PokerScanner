@@ -54,6 +54,22 @@ class BleService {
 
   // ── Public API ───────────────────────────────────────────────────────────
 
+  /// Waits until the BT adapter is powered on (or times out after [timeout]).
+  Future<bool> _waitForBluetoothReady({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    if (FlutterBluePlus.adapterStateNow == BluetoothAdapterState.on) return true;
+    try {
+      await FlutterBluePlus.adapterState
+          .where((s) => s == BluetoothAdapterState.on)
+          .first
+          .timeout(timeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Scan for nearby RFID Scanner devices and return them as a stream.
   Stream<BluetoothDevice> scanForDevices({
     Duration timeout = const Duration(seconds: 10),
@@ -62,29 +78,39 @@ class BleService {
     final ctrl = StreamController<BluetoothDevice>();
     StreamSubscription<List<ScanResult>>? sub;
 
-    FlutterBluePlus.startScan(
-      withServices: [Guid(_kServiceUuid)],
-      timeout: timeout,
-    );
-
-    sub = FlutterBluePlus.scanResults.listen(
-      (results) {
-        for (final r in results) {
-          if (!ctrl.isClosed) ctrl.add(r.device);
-        }
-      },
-      onDone: () {
+    Future(() async {
+      final ready = await _waitForBluetoothReady();
+      if (!ready || ctrl.isClosed) {
+        if (!ctrl.isClosed) ctrl.addError(Exception('Bluetooth is not available'));
         if (!ctrl.isClosed) ctrl.close();
-        sub?.cancel();
-        if (_state == BleConnectionState.scanning) {
-          _setState(BleConnectionState.disconnected);
-        }
-      },
-      onError: (Object e) {
-        if (!ctrl.isClosed) ctrl.addError(e);
-        sub?.cancel();
-      },
-    );
+        _setState(BleConnectionState.disconnected);
+        return;
+      }
+
+      sub = FlutterBluePlus.scanResults.listen(
+        (results) {
+          for (final r in results) {
+            if (!ctrl.isClosed) ctrl.add(r.device);
+          }
+        },
+        onDone: () {
+          if (!ctrl.isClosed) ctrl.close();
+          sub?.cancel();
+          if (_state == BleConnectionState.scanning) {
+            _setState(BleConnectionState.disconnected);
+          }
+        },
+        onError: (Object e) {
+          if (!ctrl.isClosed) ctrl.addError(e);
+          sub?.cancel();
+        },
+      );
+
+      await FlutterBluePlus.startScan(
+        withServices: [Guid(_kServiceUuid)],
+        timeout: timeout,
+      );
+    });
 
     ctrl.onCancel = () {
       sub?.cancel();
@@ -132,6 +158,9 @@ class BleService {
     if (savedId == null) return false;
 
     try {
+      final ready = await _waitForBluetoothReady();
+      if (!ready) return false;
+
       // Check if the device is already in the system's known-devices list.
       final knownDevices = await FlutterBluePlus.bondedDevices;
       BluetoothDevice? target;

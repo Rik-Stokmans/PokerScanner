@@ -15,22 +15,35 @@ class BotService {
 
   final _random = Random();
   bool _acting = false;
+  // Stores the latest game update received while a bot action was in-flight.
+  // After the action completes we replay it so the next bot's turn isn't dropped.
+  GameModel? _pendingGame;
+  String? _pendingHostId;
 
   void onGameUpdate(GameModel? game, String hostId) {
     if (game == null) return;
     if (game.hostId != hostId) return; // only host drives bots
     final currentPlayer = game.currentTurnPlayerId;
     if (currentPlayer == null || !isBot(currentPlayer)) return;
-    if (_acting) return;
+    if (_acting) {
+      // Can't act right now — save state and process after current action finishes.
+      _pendingGame = game;
+      _pendingHostId = hostId;
+      return;
+    }
     _act(game, currentPlayer);
   }
 
   void dispose() {
     _acting = false;
+    _pendingGame = null;
+    _pendingHostId = null;
   }
 
   Future<void> _act(GameModel game, String botUid) async {
     _acting = true;
+    _pendingGame = null;
+    _pendingHostId = null;
     await Future.delayed(Duration(milliseconds: 800 + _random.nextInt(1000)));
     try {
       final highBet =
@@ -55,6 +68,15 @@ class BotService {
       }
     } finally {
       _acting = false;
+      // If a game update arrived while we were acting, replay it now so the
+      // next bot's turn is not silently dropped.
+      final pending = _pendingGame;
+      final pendingHost = _pendingHostId;
+      _pendingGame = null;
+      _pendingHostId = null;
+      if (pending != null && pendingHost != null) {
+        onGameUpdate(pending, pendingHost);
+      }
     }
   }
 
