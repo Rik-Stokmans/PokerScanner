@@ -8,8 +8,26 @@ import '../models/card_model.dart';
 import '../models/hand_action_model.dart';
 import '../services/firestore_service.dart';
 
-class GameHistoryScreen extends ConsumerWidget {
+const int _kPageSize = 20;
+const int _kInitialSize = 30;
+
+class GameHistoryScreen extends ConsumerStatefulWidget {
   const GameHistoryScreen({super.key});
+
+  @override
+  ConsumerState<GameHistoryScreen> createState() => _GameHistoryScreenState();
+}
+
+class _GameHistoryScreenState extends ConsumerState<GameHistoryScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  int _displayLimit = _kInitialSize;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   List<HandModel> _applyFilter(
       List<HandModel> hands, HistoryFilter filter, String myUid) {
@@ -17,9 +35,8 @@ class GameHistoryScreen extends ConsumerWidget {
       case HistoryFilter.all:
         return hands;
       case HistoryFilter.favorites:
-        // favoritedBy is not yet on HandModel — return empty until added
         return hands
-            .where((h) => (h.favoritedBy ?? const <String>[]).contains(myUid))
+            .where((h) => (h.favoritedBy).contains(myUid))
             .toList();
       case HistoryFilter.won:
         return hands.where((h) => h.winnerId == myUid).toList();
@@ -28,8 +45,20 @@ class GameHistoryScreen extends ConsumerWidget {
     }
   }
 
+  List<HandModel> _filterHands(List<HandModel> hands) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return hands;
+    return hands.where((hand) {
+      if (hand.winnerUsername.toLowerCase().contains(query)) return true;
+      for (final name in hand.playerNames.values) {
+        if (name.toLowerCase().contains(query)) return true;
+      }
+      return false;
+    }).toList();
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final handsAsync = ref.watch(activeGameHandsProvider);
     final activeFilter = ref.watch(historyFilterProvider);
     final myUid = ref.watch(currentUserProvider).value?.id ?? '';
@@ -133,6 +162,44 @@ class GameHistoryScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              // Search bar — filter by player name
+              TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() {
+                  _searchQuery = value;
+                  _displayLimit = _kInitialSize;
+                }),
+                style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+                decoration: InputDecoration(
+                  hintText: 'Search by player name…',
+                  hintStyle: GoogleFonts.inter(
+                      fontSize: 14, color: AppColors.onSurfaceVariant),
+                  prefixIcon: const Icon(Icons.search,
+                      color: AppColors.onSurfaceVariant, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppColors.onSurfaceVariant, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                              _displayLimit = _kInitialSize;
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppColors.surfaceContainerHigh,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               Expanded(
                 child: handsAsync.when(
                   loading: () => const Center(
@@ -143,8 +210,9 @@ class GameHistoryScreen extends ConsumerWidget {
                         style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
                   ),
                   data: (allHands) {
-                    final hands = _applyFilter(allHands, activeFilter, myUid);
-                    if (hands.isEmpty) {
+                    final filtered = _filterHands(_applyFilter(allHands, activeFilter, myUid));
+
+                    if (filtered.isEmpty) {
                       return Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -153,32 +221,65 @@ class GameHistoryScreen extends ConsumerWidget {
                                 color: AppColors.onSurfaceVariant.withOpacity(0.4)),
                             const SizedBox(height: 12),
                             Text(
-                              allHands.isEmpty
-                                  ? 'No hands played yet'
-                                  : 'No hands match this filter',
+                              _searchQuery.isNotEmpty
+                                  ? 'No hands match "$_searchQuery"'
+                                  : allHands.isEmpty
+                                      ? 'No hands played yet'
+                                      : 'No hands match this filter',
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
+                              )),
                             const SizedBox(height: 6),
                             Text(
-                              allHands.isEmpty
-                                  ? 'Start a session to record hand history'
-                                  : 'Try a different filter',
+                              _searchQuery.isNotEmpty
+                                  ? 'Try a different search term'
+                                  : allHands.isEmpty
+                                      ? 'Start a session to record hand history'
+                                      : 'Try a different filter',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: AppColors.onSurfaceVariant.withOpacity(0.6),
-                              ),
-                            ),
+                              )),
                           ],
                         ),
                       );
                     }
+
+                    // Pagination: show up to _displayLimit entries (t23)
+                    final displayed = filtered.take(_displayLimit).toList();
+                    final hasMore = filtered.length > _displayLimit;
+
                     return ListView.separated(
-                      itemCount: hands.length,
+                      itemCount: displayed.length + (hasMore ? 1 : 0),
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, i) => _HandCard(hand: hands[i]),
+                      itemBuilder: (context, i) {
+                        if (i == displayed.length) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: TextButton(
+                              onPressed: () => setState(() {
+                                _displayLimit += _kPageSize;
+                              }),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                      color: AppColors.primary.withOpacity(0.4)),
+                                ),
+                              ),
+                              child: Text(
+                                'Load more (${filtered.length - _displayLimit} remaining)',
+                                style: GoogleFonts.inter(
+                                    fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          );
+                        }
+                        return _HandCard(hand: displayed[i]);
+                      },
                     );
                   },
                 ),

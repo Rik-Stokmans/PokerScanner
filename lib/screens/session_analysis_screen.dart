@@ -1,6 +1,8 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/hand_model.dart';
 import '../theme/app_colors.dart';
 import '../widgets/gradient_button.dart';
 import '../providers/providers.dart';
@@ -92,6 +94,17 @@ class SessionAnalysisScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 24),
+
+              // Stack over time sparkline (t22)
+              handsAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (hands) {
+                  final myUid = user?.id ?? '';
+                  if (hands.length < 2) return const SizedBox.shrink();
+                  return _StackSparkline(hands: hands, myUid: myUid);
+                },
+              ),
 
               // Positional Edge
               Text('Positional Edge',
@@ -347,6 +360,85 @@ class _ErrorCard extends StatelessWidget {
                 fontSize: 13, fontWeight: FontWeight.w700,
                 color: isWin ? AppColors.primary : AppColors.error,
               )),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small sparkline showing running P&L across recorded hands (t22).
+class _StackSparkline extends StatelessWidget {
+  final List<HandModel> hands;
+  final String myUid;
+
+  const _StackSparkline({required this.hands, required this.myUid});
+
+  List<FlSpot> _buildSpots() {
+    double running = 0;
+    final spots = <FlSpot>[const FlSpot(0, 0)];
+    for (int i = 0; i < hands.length; i++) {
+      final hand = hands[i];
+      if (hand.winnerId == myUid) {
+        running += hand.potAmount;
+      } else {
+        running -= hand.potAmount * 0.1; // rough approximation of ante/blind loss
+      }
+      spots.add(FlSpot((i + 1).toDouble(), running));
+    }
+    return spots;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final spots = _buildSpots();
+    final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+    final minY = spots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
+    final isPositive = spots.last.y >= 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Stack Over Time',
+              style: GoogleFonts.manrope(
+                fontSize: 14, fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              )),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 72,
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: (hands.length).toDouble(),
+                minY: minY - 1,
+                maxY: maxY + 1,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: isPositive ? AppColors.primary : AppColors.error,
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: (isPositive ? AppColors.primary : AppColors.error)
+                          .withOpacity(0.12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
