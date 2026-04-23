@@ -146,11 +146,13 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surface,
-      body: Stack(
-        children: [
-          SafeArea(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+          Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, (showActionBar || showNewHandBar) ? 110 : 20),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -411,32 +413,26 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
             ],
           ),
         ),
-      ),
-
-          // ── Floating action bar ──────────────────────────────────────────
+          ),
+          // ── Sticky action bar ────────────────────────────────────────────
           if (showActionBar)
-            Positioned(
-              bottom: 0, left: 0, right: 0,
-              child: _ActionBar(
-                game: game,
-                userId: user.id,
-                isFacingBet: isFacingBet,
-                callAmount: callAmount,
-                minRaiseAmount: minRaiseAmount,
-                myStack: myStack,
-                onEditStack: () => _showEditStackDialog(context, game, user.id, myStack),
-              ),
+            _ActionBar(
+              game: game,
+              userId: user.id,
+              isFacingBet: isFacingBet,
+              callAmount: callAmount,
+              minRaiseAmount: minRaiseAmount,
+              myStack: myStack,
+              onEditStack: () => _showEditStackDialog(context, game, user.id, myStack),
             ),
 
-          // ── Floating start new hand bar (host only) ───────────────────
+          // ── Sticky start new hand bar (host only) ─────────────────────
           if (showNewHandBar)
-            Positioned(
-              bottom: 0, left: 0, right: 0,
-              child: _StartNewHandBar(
-                onTap: () => FirestoreService.startNewHandForScanner(game.id, game),
-              ),
+            _StartNewHandBar(
+              onTap: () => FirestoreService.startNewHandForScanner(game.id, game),
             ),
         ],
+        ),
       ),
     );
   }
@@ -593,32 +589,35 @@ class _MyHandPanelState extends ConsumerState<_MyHandPanel> {
           const SizedBox(height: 14),
 
           // Card faces or card backs
-          Row(
-            children: List.generate(2, (i) {
-              final card = i < myCards.length ? myCards[i] : null;
-              return Padding(
-                padding: EdgeInsets.only(right: i == 0 ? 10 : 0),
-                child: card != null && _revealed
-                    ? _HoleCard(card: card)
-                    : card != null
-                        ? _CardBack()
-                        : Container(
-                            width: 64, height: 88,
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: AppColors.outlineVariant.withValues(alpha: 0.2),
+          Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(2, (i) {
+                final card = i < myCards.length ? myCards[i] : null;
+                return Padding(
+                  padding: EdgeInsets.only(right: i == 0 ? 10 : 0),
+                  child: card != null && _revealed
+                      ? _HoleCard(card: card)
+                      : card != null
+                          ? _CardBack()
+                          : Container(
+                              width: 64, height: 88,
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.outlineVariant.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Center(
+                                child: Icon(Icons.help_outline,
+                                    size: 22,
+                                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
                               ),
                             ),
-                            child: Center(
-                              child: Icon(Icons.help_outline,
-                                  size: 22,
-                                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
-                            ),
-                          ),
-              );
-            }),
+                );
+              }),
+            ),
           ),
 
           // Show Hand button — only available when the hand is over
