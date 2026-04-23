@@ -50,8 +50,7 @@ flutter: #1      MethodChannelQuery.snapshots.<anonymous closure> (package:cloud
 
 ### Firestore / service layer
 
-- [ ] **Record actions in `FirestoreService`** — whenever `playerBet`, `playerFold`, `playerCheck`, or blinds are posted, append a `HandActionModel` to a running action log on the active game document (e.g. `currentHandActions` list). On hand resolution copy that list into the archived `HandModel` and clear it from the game document.
-  > note: cherry-pick conflict — agent's commit conflicted with model layer changes; service-layer action recording not yet landed
+- [x] **Record actions in `FirestoreService`** — whenever `playerBet`, `playerFold`, `playerCheck`, or blinds are posted, append a `HandActionModel` to a running action log on the active game document (e.g. `currentHandActions` list). On hand resolution copy that list into the archived `HandModel` and clear it from the game document.
 
 - [x] **Add `FirestoreService.toggleFavoriteHand(gameId, handId, uid)`** — toggle the user's UID in the `favoritedBy` array using Firestore `arrayUnion` / `arrayRemove`.
 
@@ -91,8 +90,7 @@ flutter: #1      MethodChannelQuery.snapshots.<anonymous closure> (package:cloud
 
 ### Nice-to-have future features
 
-- [ ] **Share a hand** — long-press or button in expanded view to generate a text summary of the hand ("Hand #12 · Alice won €4.20 with a Flush after a raise war on the river") and trigger the native share sheet.
-  > note: requires share_plus package which is not in pubspec.yaml
+- [x] **Share a hand** — long-press or button in expanded view to generate a text summary of the hand ("Hand #12 · Alice won €4.20 with a Flush after a raise war on the river") and trigger the native share sheet.
 
 - [x] **Search by player name** — a search bar that filters the hand list to only hands where a specific player participated or won.
 
@@ -100,5 +98,4 @@ flutter: #1      MethodChannelQuery.snapshots.<anonymous closure> (package:cloud
 
 - [x] **Pagination / load more** — if a session has > 30 hands, lazy-load older hands in batches of 20 using Firestore cursor-based pagination to keep the list fast.
 
-- [ ] **Export hand history** — a button in the top-right filter menu to export all hands in the current session as a plain-text or CSV file and share it.
-  > note: requires share_plus package which is not in pubspec.yaml
+- [x] **Export hand history** — a button in the top-right filter menu to export all hands in the current session as a plain-text or CSV file and share it.
