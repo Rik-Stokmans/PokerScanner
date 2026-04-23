@@ -385,11 +385,11 @@ class FirestoreService {
         .collection('hands')
         .add(hand.toMap());
 
-    // Update winner stats
-    await _db.collection('users').doc(winnerId).update({
+    // Update winner stats (use set+merge so the doc is created if it doesn't exist yet)
+    await _db.collection('users').doc(winnerId).set({
       'totalWinnings': FieldValue.increment(game.pot),
       'totalHandsPlayed': FieldValue.increment(1),
-    });
+    }, SetOptions(merge: true));
 
     // Do NOT auto-start the next hand — the host manually triggers startNewHandForScanner
     // so players have time to optionally show their cards first.
