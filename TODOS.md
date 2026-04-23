@@ -4,8 +4,8 @@ The scanner hardware sends opaque raw chip IDs — it has no knowledge of card r
 
 ---
 
-- [ ] when the user wants to invite people to the table present a page where all friends can be seen filtered by online and offline with a search bar at the top, also add a button to add/request new friends
-- [ ] i got the below error in the app, please fix the error
+- [x] when the user wants to invite people to the table present a page where all friends can be seen filtered by online and offline with a search bar at the top, also add a button to add/request new friends
+- [x] i got the below error in the app, please fix the error
 ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: [cloud_firestore/not-found] Some requested document was not found.
 #0      FirebaseFirestoreHostApi.documentReferenceUpdate (package:cloud_firestore_platform_interface/src/pigeon/messages.pigeon.dart:1059:7)
 <asynchronous suspension>
@@ -22,4 +22,4 @@ ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: [cloud_fi
 #6      FirestoreService.playerBet (package:poker_scanner/services/firestore_service.dart:223:5)
 <asynchronous suspension>
 #7      BotService._act (package:poker_sca
-- [ ] when i open the bluetooth menu in the lobby page again after i allready connected a scanner it does not show me that a scanner is connected and the status in the top goes from scanner active to scanner offline. can you show the device as connected when it is
+- [x] when i open the bluetooth menu in the lobby page again after i allready connected a scanner it does not show me that a scanner is connected and the status in the top goes from scanner active to scanner offline. can you show the device as connected when it is
