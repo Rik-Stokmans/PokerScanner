@@ -8,6 +8,7 @@ import '../models/deck_model.dart';
 import '../models/invitation_model.dart';
 import '../models/friendship_model.dart';
 import '../services/hand_evaluator.dart';
+import '../services/decision_evaluator.dart';
 
 class FirestoreService {
   static final _db = FirebaseFirestore.instance;
@@ -512,6 +513,16 @@ class FirestoreService {
 
     // Persist win condition description on the hand document
     await setHandWinCondition(gameId, handRef.id, result.description);
+
+    // Evaluate hand decisions and append XP events to the game document
+    final xpEvents =
+        DecisionEvaluator.evaluateHand(hand, winnerId, game.bigBlind);
+    if (xpEvents.isNotEmpty) {
+      await _db.collection('games').doc(gameId).update({
+        'pendingXpEvents':
+            FieldValue.arrayUnion(xpEvents.map((e) => e.toMap()).toList()),
+      });
+    }
 
     // Update winner stats (use set+merge so the doc is created if it doesn't exist yet)
     await _db.collection('users').doc(winnerId).set({

@@ -36,6 +36,8 @@ class GameModel {
   /// Ordered list of players who still need to act in the current betting round.
   /// After a raise, all non-raisers are added back. Round ends when this is empty.
   final List<String> playersToAct;
+  /// XP events pending to be awarded at session end (serialised as plain maps).
+  final List<Map<String, dynamic>> pendingXpEvents;
 
   const GameModel({
     required this.id,
@@ -64,6 +66,7 @@ class GameModel {
     this.seatAssignments = const {},
     this.dealerPlayerId,
     this.playersToAct = const [],
+    this.pendingXpEvents = const [],
   });
 
   int get playerCount => playerIds.length;
@@ -106,6 +109,7 @@ class GameModel {
         'seatAssignments': seatAssignments,
         if (dealerPlayerId != null) 'dealerPlayerId': dealerPlayerId,
         'playersToAct': playersToAct,
+        'pendingXpEvents': pendingXpEvents,
       };
 
   factory GameModel.fromMap(String id, Map<String, dynamic> map) {
@@ -150,6 +154,10 @@ class GameModel {
           const {},
       dealerPlayerId: map['dealerPlayerId'] as String?,
       playersToAct: List<String>.from(map['playersToAct'] ?? []),
+      pendingXpEvents: (map['pendingXpEvents'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [],
     );
   }
 }
