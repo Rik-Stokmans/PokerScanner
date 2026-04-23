@@ -140,43 +140,7 @@ class SessionAnalysisScreen extends ConsumerWidget {
                               fontSize: 13, color: AppColors.onSurfaceVariant,
                             )),
                       )
-                    : Column(
-                        children: stats.positionalPnl.entries.map((entry) {
-                          final isPositive = entry.value >= 0;
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Container(
-                                  width: 40,
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Center(
-                                    child: Text(entry.key,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11, fontWeight: FontWeight.w700,
-                                          color: AppColors.onSurfaceVariant,
-                                          letterSpacing: 0.5,
-                                        )),
-                                  ),
-                                ),
-                                Text(
-                                  '${isPositive ? "+" : ""}\$${entry.value.abs().toStringAsFixed(0)}',
-                                  style: GoogleFonts.manrope(
-                                    fontSize: 16, fontWeight: FontWeight.w700,
-                                    color: isPositive ? AppColors.primary : AppColors.error,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                    : _PositionalBarChart(positionalPnl: stats.positionalPnl),
               ),
               const SizedBox(height: 24),
 
@@ -668,6 +632,100 @@ class _StackSparkline extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PositionalBarChart extends StatelessWidget {
+  final Map<String, double> positionalPnl;
+
+  const _PositionalBarChart({required this.positionalPnl});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxAbsValue = positionalPnl.values
+        .map((v) => v.abs())
+        .fold<double>(0, (a, b) => a > b ? a : b);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        children: positionalPnl.entries.map((entry) {
+          final isPositive = entry.value >= 0;
+          final fraction = maxAbsValue > 0 ? entry.value.abs() / maxAbsValue : 0.0;
+          final barColor = isPositive ? AppColors.primary : AppColors.error;
+          final label = '${isPositive ? "+" : "-"}\$${entry.value.abs().toStringAsFixed(0)}';
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 40,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Center(
+                      child: Text(
+                        entry.key,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final barWidth = constraints.maxWidth * fraction;
+                      return Stack(
+                        children: [
+                          Container(
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          Container(
+                            height: 20,
+                            width: barWidth,
+                            decoration: BoxDecoration(
+                              color: barColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 60,
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.manrope(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: barColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
