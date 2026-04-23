@@ -9,6 +9,7 @@ import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../models/game_model.dart';
 import 'learn/session_xp_summary_sheet.dart';
+import '../services/decision_evaluator.dart';
 import '../services/learning_service.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
@@ -48,7 +49,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     }
     // Build a default set of session XP events.
     final defaultEvents = [
-      const XpEvent(reason: 'Completed a session', xp: 50),
+      const XpEvent(label: 'Completed a session', xp: 50, isPositive: true),
     ];
     context.go('/learn');
     // Show the sheet after navigation settles.

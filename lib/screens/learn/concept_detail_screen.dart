@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../data/concept_library.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/learning_service.dart';
 import '../../theme/app_colors.dart';
 
@@ -78,8 +79,8 @@ class _ConceptDetailScreenState
     if (_isMarkedRead || _isLoading) return;
     setState(() => _isLoading = true);
     try {
-      final xp =
-          await LearningService.instance.markConceptRead(_concept.id);
+      final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      await LearningService.markConceptRead(userId, _concept.id);
       if (mounted) {
         setState(() {
           _isMarkedRead = true;
@@ -92,7 +93,7 @@ class _ConceptDetailScreenState
                 const Icon(Icons.star, color: Colors.amber, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  '+$xp XP — Concept marked as read!',
+                  'Concept marked as read!',
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.w600,
                     color: AppColors.onSurface,

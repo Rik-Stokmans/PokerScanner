@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../providers/providers.dart';
 import '../theme/app_colors.dart';
-import '../widgets/gradient_button.dart';
+import 'learn/drills_tab.dart';
+import 'learn/study_tab.dart';
+import 'learn/progress_tab.dart';
 
-class LearnScreen extends StatefulWidget {
+class LearnScreen extends ConsumerStatefulWidget {
   const LearnScreen({super.key});
 
   @override
-  State<LearnScreen> createState() => _LearnScreenState();
+  ConsumerState<LearnScreen> createState() => _LearnScreenState();
 }
 
-class _LearnScreenState extends State<LearnScreen>
+class _LearnScreenState extends ConsumerState<LearnScreen>
     with SingleTickerProviderStateMixin {
   static const _tabs = ['For You', 'Drills', 'Study', 'Progress'];
 
@@ -87,9 +91,9 @@ class _LearnScreenState extends State<LearnScreen>
                 controller: _tabController,
                 children: const [
                   _ForYouTab(),
-                  _DrillsTab(),
-                  _StudyTab(),
-                  _ProgressTab(),
+                  DrillsTab(),
+                  StudyTab(),
+                  ProgressTab(),
                 ],
               ),
             ),
@@ -102,103 +106,70 @@ class _LearnScreenState extends State<LearnScreen>
 
 // ─── For You ──────────────────────────────────────────────────────────────
 
-class _ForYouTab extends StatelessWidget {
+class _ForYouTab extends ConsumerWidget {
   const _ForYouTab();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progressAsync = ref.watch(learningProgressProvider);
+    final session = ref.watch(sessionAnalysisProvider);
+    final userAsync = ref.watch(currentUserProvider);
+
+    final progress = progressAsync.value;
+    final userName = userAsync.value?.username ?? '';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Level & XP banner ───────────────────────────────────────────
+          if (progress != null) ...[
+            _LevelBanner(progress: progress),
+            const SizedBox(height: 20),
+          ],
+
+          // ── Greeting / section title ────────────────────────────────────
           Text(
-            'Mastering the Defensive Table',
+            userName.isNotEmpty
+                ? 'Good session, $userName'
+                : 'Your Personalised Feed',
             style: GoogleFonts.manrope(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: AppColors.onSurface,
             ),
           ),
+          const SizedBox(height: 16),
+
+          // ── Session insight card ────────────────────────────────────────
+          _SessionInsightCard(insight: session.aiInsight),
           const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.primary.withOpacity(0.2),
+
+          // ── Drill recommendations ───────────────────────────────────────
+          if (session.leakWarnings.isNotEmpty) ...[
+            Text(
+              'Recommended Drills',
+              style: GoogleFonts.manrope(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.psychology,
-                        color: AppColors.primary, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'AI Mistake Analysis',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'You are currently overfolding in the Big Blind by 14%. '
-                  'Our AI suggests focusing on wider defense ranges against Button opens.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.onSurfaceVariant,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                        ),
-                        child: Text(
-                          'Resume Drill',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 11),
-                        ),
-                        child: Text(
-                          'Review Hands',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 10),
+            ...session.leakWarnings
+                .take(3)
+                .map((leak) => _DrillRecommendationCard(leak: leak)),
+            const SizedBox(height: 20),
+          ],
+
+          // ── Resume last drill ───────────────────────────────────────────
+          if (progress != null && progress.lastDrillDate != null) ...[
+            _ResumeLastDrillCard(lastDrillDate: progress.lastDrillDate!),
+            const SizedBox(height: 20),
+          ],
+
+          // ── Video leak section ──────────────────────────────────────────
           Text(
             'Pattern Recognition',
             style: GoogleFonts.manrope(
@@ -236,172 +207,125 @@ class _ForYouTab extends StatelessWidget {
   }
 }
 
-// ─── Drills ───────────────────────────────────────────────────────────────
+// ─── Level & XP Banner ────────────────────────────────────────────────────
 
-class _DrillsTab extends StatelessWidget {
-  const _DrillsTab();
+class _LevelBanner extends StatelessWidget {
+  final dynamic progress; // LearningProgressModel
+
+  const _LevelBanner({required this.progress});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+    final xpFraction = progress.xpToNextLevel > 0
+        ? (progress.currentXp / progress.xpToNextLevel).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  progress.levelName.toUpperCase(),
+                  style: GoogleFonts.manrope(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              // Daily streak chip
+              _DailyStreakChip(streak: progress.currentStreak),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: xpFraction,
+              minHeight: 6,
+              backgroundColor: AppColors.surfaceContainerHighest,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${progress.currentXp} XP',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              Text(
+                '${progress.xpToNextLevel} XP to next level',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Daily Streak Chip ────────────────────────────────────────────────────
+
+class _DailyStreakChip extends StatelessWidget {
+  final int streak;
+
+  const _DailyStreakChip({required this.streak});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: streak > 0
+            ? const Color(0xFFFF7043).withOpacity(0.15)
+            : AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: streak > 0
+              ? const Color(0xFFFF7043).withOpacity(0.4)
+              : AppColors.outlineVariant,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.local_fire_department,
+            size: 14,
+            color: streak > 0
+                ? const Color(0xFFFF7043)
+                : AppColors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
           Text(
-            'Tactical Drill',
-            style: GoogleFonts.manrope(
-              fontSize: 18,
+            '$streak day${streak == 1 ? '' : 's'}',
+            style: GoogleFonts.inter(
+              fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Defending the Big Blind',
-                            style: GoogleFonts.manrope(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Focus: Countering High-Frequency Steals',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.errorContainer.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Advanced',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.error,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _DrillStat(
-                            label: 'Success\nRate', value: '68%')),
-                    Expanded(
-                        child: _DrillStat(
-                            label: 'Target\nEV', value: '+0.42')),
-                    Expanded(
-                        child: _DrillStat(
-                            label: 'Streak',
-                            value: '5 Days',
-                            valueColor: AppColors.primary)),
-                    Expanded(
-                        child: _DrillStat(label: 'Rank', value: '#124')),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                GradientButton(
-                  label: 'START SESSION',
-                  icon: Icons.arrow_forward,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Range Master',
-            style: GoogleFonts.manrope(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'GTO vs Exploitative Ranges',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Visualize opening ranges',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.layers_outlined,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Open Charts',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              color: streak > 0
+                  ? const Color(0xFFFF7043)
+                  : AppColors.onSurfaceVariant,
             ),
           ),
         ],
@@ -410,51 +334,87 @@ class _DrillsTab extends StatelessWidget {
   }
 }
 
-// ─── Study ────────────────────────────────────────────────────────────────
+// ─── Session Insight Card ─────────────────────────────────────────────────
 
-class _StudyTab extends StatelessWidget {
-  const _StudyTab();
+class _SessionInsightCard extends StatelessWidget {
+  final String insight;
+
+  const _SessionInsightCard({required this.insight});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.primary.withOpacity(0.2),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Study Materials',
-            style: GoogleFonts.manrope(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-            ),
+          Row(
+            children: [
+              const Icon(Icons.psychology,
+                  color: AppColors.primary, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                'AI Session Insight',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
-            'Concepts, articles and videos to deepen your game.',
+            insight,
             style: GoogleFonts.inter(
               fontSize: 13,
               color: AppColors.onSurfaceVariant,
+              height: 1.5,
             ),
           ),
-          const SizedBox(height: 20),
-          const _StudyConceptCard(
-            title: 'Pot Odds & Implied Odds',
-            subtitle: 'Master the math behind every call',
-            icon: Icons.calculate_outlined,
-          ),
-          const SizedBox(height: 10),
-          const _StudyConceptCard(
-            title: 'Board Texture Analysis',
-            subtitle: 'Wet vs dry: adjusting your ranges',
-            icon: Icons.grid_view_outlined,
-          ),
-          const SizedBox(height: 10),
-          const _StudyConceptCard(
-            title: 'GTO Fundamentals',
-            subtitle: 'Balanced strategies explained',
-            icon: Icons.balance_outlined,
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                  child: Text(
+                    'Resume Drill',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                  child: Text(
+                    'Review Hands',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -462,16 +422,59 @@ class _StudyTab extends StatelessWidget {
   }
 }
 
-class _StudyConceptCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
+// ─── Drill Recommendation Card ────────────────────────────────────────────
 
-  const _StudyConceptCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
+class _DrillRecommendationCard extends StatelessWidget {
+  final String leak;
+
+  const _DrillRecommendationCard({required this.leak});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.errorContainer.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.error.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: AppColors.error, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                leak,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.onSurface,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Resume Last Drill Card ───────────────────────────────────────────────
+
+class _ResumeLastDrillCard extends StatelessWidget {
+  final DateTime lastDrillDate;
+
+  const _ResumeLastDrillCard({required this.lastDrillDate});
+
+  String _formatDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -490,24 +493,24 @@ class _StudyConceptCard extends StatelessWidget {
               color: AppColors.primary.withOpacity(0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
+            child: const Icon(Icons.play_arrow_rounded,
+                color: AppColors.primary, size: 22),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  'Resume Last Drill',
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: AppColors.onSurface,
                   ),
                 ),
-                const SizedBox(height: 3),
                 Text(
-                  subtitle,
+                  'Last played ${_formatDate(lastDrillDate)}',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: AppColors.onSurfaceVariant,
@@ -524,151 +527,7 @@ class _StudyConceptCard extends StatelessWidget {
   }
 }
 
-// ─── Progress ─────────────────────────────────────────────────────────────
-
-class _ProgressTab extends StatelessWidget {
-  const _ProgressTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Weekly Progress',
-            style: GoogleFonts.manrope(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ProgressItem(
-                      label: 'BB Defense', value: '+12%', positive: true),
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: AppColors.outlineVariant.withOpacity(0.15),
-                ),
-                Expanded(
-                  child: _ProgressItem(
-                      label: 'Pattern Match',
-                      value: '+5%',
-                      positive: true),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Badges',
-            style: GoogleFonts.manrope(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _BadgeChip(label: 'First Drill', icon: Icons.star_outline),
-              _BadgeChip(label: 'Pot Odds Pro', icon: Icons.calculate),
-              _BadgeChip(label: 'Range Master', icon: Icons.layers),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BadgeChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-
-  const _BadgeChip({required this.label, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withOpacity(0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: AppColors.primary, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Shared sub-widgets ───────────────────────────────────────────────────
-
-class _DrillStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  const _DrillStat({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.manrope(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: valueColor ?? AppColors.onSurface,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            color: AppColors.onSurfaceVariant,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ],
-    );
-  }
-}
+// ─── Video Leak Card ──────────────────────────────────────────────────────
 
 class _VideoLeakCard extends StatelessWidget {
   final String title;
@@ -717,41 +576,6 @@ class _VideoLeakCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ProgressItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool positive;
-
-  const _ProgressItem({
-    required this.label,
-    required this.value,
-    required this.positive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.manrope(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: positive ? AppColors.primary : AppColors.error,
-          ),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-      ],
     );
   }
 }

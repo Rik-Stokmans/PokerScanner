@@ -5,7 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../data/daily_puzzles.dart';
 import '../../models/learning_progress_model.dart';
-import '../../providers/learning_progress_provider.dart';
+import '../../providers/providers.dart';
+import '../../services/learning_service.dart';
 import '../../theme/app_colors.dart';
 
 // ─── State helpers ────────────────────────────────────────────────────────────
@@ -85,10 +86,10 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen>
       _puzzleState = correct ? _PuzzleState.correct : _PuzzleState.incorrect;
     });
 
-    await ref.read(learningProgressProvider.notifier).recordPuzzleAttempt(
-          puzzleId: _puzzle.id,
-          correct: correct,
-        );
+    await LearningService.recordDrillResult(
+      drillId: 'daily_puzzle_${_puzzle.id}',
+      correct: correct,
+    );
 
     if (correct) {
       _confettiController.forward();
@@ -102,7 +103,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen>
         '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
     final result = _puzzleState == _PuzzleState.correct ? 'Correct' : 'Wrong';
     final progressAsync = ref.read(learningProgressProvider);
-    final streak = progressAsync.value?.puzzleStreakDays ?? 0;
+    final streak = progressAsync.value?.streakDays ?? 0;
 
     Share.share(
       'PokerScanner Daily Puzzle — $dateStr\n'
@@ -233,7 +234,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen>
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
-                _StreakChip(streak: progress.puzzleStreakDays),
+                _StreakChip(streak: progress.streakDays),
                 const SizedBox(height: 32),
                 OutlinedButton.icon(
                   onPressed: _share,
@@ -283,7 +284,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen>
           ],
         ),
         if (progress != null)
-          _StreakChip(streak: progress.puzzleStreakDays),
+          _StreakChip(streak: progress.streakDays),
       ],
     );
   }

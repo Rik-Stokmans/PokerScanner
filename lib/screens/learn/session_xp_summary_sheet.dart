@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../services/learning_service.dart';
 import '../../providers/providers.dart';
 import '../../models/learning_progress_model.dart';
+import '../../services/decision_evaluator.dart';
 
 /// Shows an XP summary bottom sheet at the end of a session.
 ///
@@ -46,7 +47,7 @@ class _SessionXpSummarySheetState
       widget.events.fold(0, (sum, e) => sum + e.xp);
 
   List<XpEvent> get _bonusEvents =>
-      widget.events.where((e) => e.xp > 0).toList();
+      widget.events.where((e) => e.isPositive && e.xp > 0).toList();
 
   @override
   void initState() {
@@ -74,7 +75,13 @@ class _SessionXpSummarySheetState
   Future<void> _claimXp() async {
     if (_claimed) return;
     setState(() => _claimed = true);
-    await LearningService.awardSessionXp(widget.userId, widget.events);
+    // Award XP by recording each positive event as a drill result.
+    for (final event in widget.events.where((e) => e.xp > 0)) {
+      await LearningService.recordDrillResult(
+        drillId: 'session_award',
+        correct: event.isPositive,
+      );
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -226,7 +233,7 @@ class _SessionXpSummarySheetState
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              e.reason,
+                              e.label,
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 color: AppColors.onSurface,
@@ -252,15 +259,40 @@ class _SessionXpSummarySheetState
   }
 
   Widget _buildLevelProgress(LearningProgressModel? progress) {
-    // Compute projected progress after claiming XP
     final currentXp = progress?.xp ?? 0;
-    final currentLevel = progress?.level ?? 1;
+    final currentLevelIndex = progress?.levelIndex ?? 1;
     final projectedXp = currentXp + _totalXp;
-    final projectedLevel = LearningService.computeLevel(projectedXp);
+
+    // Compute projected level name
+    String projectedLevelName;
+    int projectedLevelIndex;
+    if (projectedXp >= 10000) {
+      projectedLevelName = 'GTO Wizard';
+      projectedLevelIndex = 6;
+    } else if (projectedXp >= 6000) {
+      projectedLevelName = 'Crusher';
+      projectedLevelIndex = 5;
+    } else if (projectedXp >= 3000) {
+      projectedLevelName = 'Shark';
+      projectedLevelIndex = 4;
+    } else if (projectedXp >= 1500) {
+      projectedLevelName = 'Grinder';
+      projectedLevelIndex = 3;
+    } else if (projectedXp >= 500) {
+      projectedLevelName = 'Regular';
+      projectedLevelIndex = 2;
+    } else {
+      projectedLevelName = 'Fish';
+      projectedLevelIndex = 1;
+    }
+
     final projectedModel = LearningProgressModel(
       userId: widget.userId,
       xp: projectedXp,
-      level: projectedLevel,
+      streakDays: progress?.streakDays ?? 0,
+      earnedBadges: progress?.earnedBadges ?? const [],
+      drillStats: progress?.drillStats ?? const {},
+      conceptsRead: progress?.conceptsRead ?? const [],
     );
 
     return Column(
@@ -270,14 +302,14 @@ class _SessionXpSummarySheetState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Level $projectedLevel',
+              projectedLevelName,
               style: GoogleFonts.manrope(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurface,
               ),
             ),
-            if (projectedLevel > currentLevel)
+            if (projectedLevelIndex > currentLevelIndex)
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -366,7 +398,7 @@ class _XpEventRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPositive = event.xp >= 0;
+    final isPositive = event.isPositive;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
@@ -389,7 +421,7 @@ class _XpEventRow extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              event.reason,
+              event.label,
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: AppColors.onSurface,

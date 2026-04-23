@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../data/gto_ranges.dart';
-import '../../providers/learning_progress_provider.dart';
+import '../../models/learning_progress_model.dart';
+import '../../providers/providers.dart';
 import '../../services/learning_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/gradient_button.dart';
@@ -105,15 +106,15 @@ class _RangeTrainerScreenState extends ConsumerState<RangeTrainerScreen> {
   /// Returns the position with the lowest historical accuracy, defaulting to
   /// the next position in the list after the current one.
   String _nextWeakPosition() {
-    final progress = ref.read(learningProgressProvider);
+    final progress = ref.read(learningProgressProvider).value ??
+        LearningProgressModel.empty('');
     String? weakest;
     double lowestAccuracy = 2.0;
 
     for (final pos in _positions) {
       if (pos == _position) continue;
       final drillId = 'range_trainer_${pos}_$_scenario';
-      final entry = progress.where((p) => p.drillId == drillId).firstOrNull;
-      final accuracy = entry?.accuracy ?? -1.0; // unseen = try first
+      final accuracy = progress.accuracyFor(drillId);
       if (accuracy < lowestAccuracy) {
         lowestAccuracy = accuracy;
         weakest = pos;

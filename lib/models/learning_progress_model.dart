@@ -131,4 +131,116 @@ class LearningProgressModel {
         drillStats: drillStats ?? this.drillStats,
         conceptsRead: conceptsRead ?? this.conceptsRead,
       );
+
+  // ── Computed getters for UI compatibility ──────────────────────────────
+
+  /// Human-readable level name derived from XP.
+  String get levelName => level;
+
+  /// Alias for [xp] matching the progress-tab field name.
+  int get currentXp => xp;
+
+  /// XP threshold at which the current level begins.
+  int get xpLevelFloor {
+    if (xp >= 10000) return 10000;
+    if (xp >= 6000) return 6000;
+    if (xp >= 3000) return 3000;
+    if (xp >= 1500) return 1500;
+    if (xp >= 500) return 500;
+    return 0;
+  }
+
+  /// XP required to reach the next level.
+  int get xpToNextLevel {
+    if (xp >= 10000) return 10000;
+    if (xp >= 6000) return 10000;
+    if (xp >= 3000) return 6000;
+    if (xp >= 1500) return 3000;
+    if (xp >= 500) return 1500;
+    return 500;
+  }
+
+  /// XP earned within the current level band.
+  int get xpInCurrentLevel => xp - xpLevelFloor;
+
+  /// Total XP needed to span the current level band.
+  int get xpForNextLevel => xpToNextLevel - xpLevelFloor;
+
+  /// Progress fraction (0.0–1.0) within the current level band.
+  double get levelProgress {
+    final span = xpForNextLevel;
+    if (span <= 0) return 1.0;
+    return (xpInCurrentLevel / span).clamp(0.0, 1.0);
+  }
+
+  /// Returns true if the user has already attempted today's daily puzzle.
+  bool get solvedToday {
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    if (lastDrillDate == null) return false;
+    final last = lastDrillDate!;
+    final lastDate = DateTime(last.year, last.month, last.day);
+    // Has a daily_puzzle drill result from today
+    final hasPuzzleToday =
+        drillStats.keys.any((k) => k.startsWith('daily_puzzle_'));
+    return hasPuzzleToday &&
+        lastDate.isAtSameMomentAs(todayDate);
+  }
+
+  /// Integer level index (1 = Fish … 6 = GTO Wizard).
+  int get levelIndex {
+    if (xp >= 10000) return 6;
+    if (xp >= 6000) return 5;
+    if (xp >= 3000) return 4;
+    if (xp >= 1500) return 3;
+    if (xp >= 500) return 2;
+    return 1;
+  }
+
+  /// Alias for [streakDays].
+  int get currentStreak => streakDays;
+
+  /// 7-element list of booleans indicating activity for M–S of the current week.
+  /// Derived from [streakDays]: the last N days of the week are marked active.
+  List<bool> get weekActivity =>
+      List.generate(7, (i) => i >= (7 - streakDays.clamp(0, 7)));
+
+  /// Alias for [earnedBadges] matching the progress-tab field name.
+  List<String> get earnedBadgeIds => earnedBadges;
+
+  /// Placeholder recent activity list — sourced from drill stats.
+  List<LearningActivityEntry> get recentActivity => const [];
+
+  // ── Per-skill accuracy derived from drillStats ─────────────────────────
+
+  double get preflopRanges => accuracyFor('range_trainer');
+  double get potOdds => accuracyFor('pot_odds');
+  double get decisionMaking => accuracyFor('scenarios');
+  double get boardTexture => accuracyFor('board_texture');
+  double get handReading => accuracyFor('hand_review');
+
+  /// Returns the accuracy (0.0–1.0) for a given drill prefix.
+  double accuracyFor(String drillIdPrefix) {
+    final matching = drillStats.entries
+        .where((e) => e.key.startsWith(drillIdPrefix))
+        .toList();
+    if (matching.isEmpty) return 0.0;
+    final totalAttempts = matching.fold(0, (s, e) => s + e.value.attempts);
+    final totalCorrect = matching.fold(0, (s, e) => s + e.value.correct);
+    if (totalAttempts == 0) return 0.0;
+    return totalCorrect / totalAttempts;
+  }
+}
+
+/// Lightweight activity entry used for the recent-activity feed in the UI.
+class LearningActivityEntry {
+  final String description;
+  final DateTime timestamp;
+  final int xp;
+
+  const LearningActivityEntry({
+    required this.description,
+    required this.timestamp,
+    required this.xp,
+  });
 }

@@ -13,16 +13,15 @@ import 'screens/session_analysis_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/invite_friends_screen.dart';
 import 'screens/learn_screen.dart';
-import 'screens/learn/range_trainer_screen.dart';
-import 'screens/learn/hand_review_screen.dart';
 import 'screens/deck_management_screen.dart';
 import 'screens/deck_registration_screen.dart';
-import 'screens/range_trainer_screen.dart';
-import 'screens/pot_odds_drill_screen.dart';
-import 'screens/scenario_drill_screen.dart';
-import 'screens/board_texture_drill_screen.dart';
-import 'screens/hand_review_quiz_screen.dart';
-import 'screens/concept_detail_screen.dart';
+import 'screens/learn/range_trainer_screen.dart';
+import 'screens/learn/pot_odds_drill_screen.dart';
+import 'screens/learn/scenario_drill_screen.dart';
+import 'screens/learn/board_texture_screen.dart';
+import 'screens/learn/hand_review_screen.dart';
+import 'screens/learn/concept_detail_screen.dart';
+import 'screens/learn/daily_puzzle_screen.dart';
 import 'widgets/main_scaffold.dart';
 
 // Bridges Firebase auth state to go_router's refreshListenable
@@ -78,15 +77,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/learn',
             builder: (context, state) => const LearnScreen(),
           ),
-          GoRoute(
-            path: '/learn/range-trainer',
-            builder: (context, state) => const RangeTrainerScreen(),
-          ),
         ],
-      ),
-      GoRoute(
-        path: '/hand-review',
-        builder: (context, state) => const HandReviewScreen(),
       ),
       GoRoute(
         path: '/scanner-setup',
@@ -130,11 +121,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/learn/board-texture',
-        builder: (context, state) => const BoardTextureDrillScreen(),
+        builder: (context, state) => const BoardTextureScreen(),
       ),
       GoRoute(
         path: '/learn/hand-review',
-        builder: (context, state) => const HandReviewQuizScreen(),
+        builder: (context, state) => const HandReviewScreen(),
+      ),
+      GoRoute(
+        path: '/learn/daily-puzzle',
+        builder: (context, state) => const DailyPuzzleScreen(),
       ),
       GoRoute(
         path: '/learn/concept/:id',

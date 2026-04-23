@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/concept_library.dart';
-import '../../providers/learning_progress_provider.dart';
+import '../../providers/providers.dart';
 import '../../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────

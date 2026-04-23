@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/learning_progress_model.dart';
-import '../../providers/learning_progress_provider.dart';
+import '../../providers/providers.dart';
 import '../../theme/app_colors.dart';
 
 // ─── Badge metadata ───────────────────────────────────────────────────────
@@ -54,14 +54,7 @@ class ProgressTab extends ConsumerWidget {
 
     return progressAsync.when(
       data: (progress) {
-        final data = progress ??
-            const LearningProgressModel(
-              userId: '',
-              levelName: 'Beginner',
-              currentXp: 0,
-              xpToNextLevel: 1000,
-              currentStreak: 0,
-            );
+        final data = progress ?? LearningProgressModel.empty('');
         return _ProgressContent(progress: data);
       },
       loading: () => const Center(
@@ -526,7 +519,7 @@ class _BadgeChip extends StatelessWidget {
 // ─── Recent activity feed (t33) ──────────────────────────────────────────
 
 class _RecentActivityFeed extends StatelessWidget {
-  final List<XpEvent> events;
+  final List<LearningActivityEntry> events;
 
   const _RecentActivityFeed({required this.events});
 
@@ -569,7 +562,7 @@ class _RecentActivityFeed extends StatelessWidget {
 }
 
 class _ActivityRow extends StatelessWidget {
-  final XpEvent event;
+  final LearningActivityEntry event;
 
   const _ActivityRow({required this.event});
 

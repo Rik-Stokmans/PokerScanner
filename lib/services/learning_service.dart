@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/learning_progress_model.dart';
 
 class LearningService {
@@ -32,17 +33,20 @@ class LearningService {
   // ─── Drill result recording ───────────────────────────────────────────────
 
   static Future<void> recordDrillResult({
-    required String userId,
+    String? userId,
     required String drillId,
     required bool correct,
   }) async {
-    final docRef = _doc(userId);
+    final resolvedUserId =
+        userId ?? FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (resolvedUserId.isEmpty) return;
+    final docRef = _doc(resolvedUserId);
     await _db.runTransaction((tx) async {
       final snap = await tx.get(docRef);
       final progress = snap.exists
           ? LearningProgressModel.fromMap(
-              userId, snap.data()! as Map<String, dynamic>)
-          : LearningProgressModel.empty(userId);
+              resolvedUserId, snap.data()! as Map<String, dynamic>)
+          : LearningProgressModel.empty(resolvedUserId);
 
       // Update drill stats
       final existing =

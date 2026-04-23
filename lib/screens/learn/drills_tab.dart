@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../providers/learning_progress_provider.dart';
+import '../../models/learning_progress_model.dart';
+import '../../providers/providers.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/gradient_button.dart';
 
@@ -74,7 +75,8 @@ class DrillsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final progress = ref.watch(learningProgressProvider);
+    final progress = ref.watch(learningProgressProvider).value ??
+        LearningProgressModel.empty('');
 
     // Determine drill with the lowest accuracy for "Today's Focus".
     _DrillInfo focusDrill = _kDrills.first;

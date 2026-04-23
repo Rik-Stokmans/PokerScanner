@@ -459,3 +459,19 @@ final learningProgressProvider =
     error: (_, __) => Stream.value(LearningProgressModel.empty('')),
   );
 });
+
+// ─── Read concept IDs ─────────────────────────────────────────────────────
+
+/// IDs of concepts the current user has marked as read.
+final readConceptIdsProvider = Provider<AsyncValue<Set<String>>>((ref) {
+  final progressAsync = ref.watch(learningProgressProvider);
+  return progressAsync.whenData(
+    (progress) => progress.conceptsRead.toSet(),
+  );
+});
+
+// ─── XP Claim flag ────────────────────────────────────────────────────────
+
+/// A transient flag set to true when the lobby should prompt the user to
+/// claim their session XP.  Reset to false once the prompt is shown.
+final showXpClaimProvider = StateProvider<bool>((_) => false);

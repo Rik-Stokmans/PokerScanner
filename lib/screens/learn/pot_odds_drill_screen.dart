@@ -60,7 +60,7 @@ class _PotOddsDrillScreenState extends State<PotOddsDrillScreen> {
       _sessionTotal += 1;
     });
 
-    learningService.recordDrillResult(drillId: 'pot_odds', correct: correct);
+    LearningService.recordDrillResult(drillId: 'pot_odds', correct: correct);
 
     if (_sessionTotal % 10 == 0) {
       setState(() => _showSessionSummary = true);
