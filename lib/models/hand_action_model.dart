@@ -1,6 +1,6 @@
-enum ActionType { fold, call, raise, check, allIn, smallBlind, bigBlind }
+import 'game_model.dart' show BettingRound;
 
-enum BettingRound { preflop, flop, turn, river }
+enum ActionType { fold, call, raise, check, allIn, smallBlind, bigBlind }
 
 class HandActionModel {
   final String playerId;

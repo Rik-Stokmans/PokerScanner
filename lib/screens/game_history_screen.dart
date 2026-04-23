@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../theme/app_colors.dart';
 import '../providers/providers.dart';
 import '../models/hand_model.dart';
 import '../models/card_model.dart';
+import '../models/game_model.dart' show BettingRound;
 import '../models/hand_action_model.dart';
 import '../services/firestore_service.dart';
 
@@ -43,6 +45,16 @@ class _GameHistoryScreenState extends ConsumerState<GameHistoryScreen> {
       case HistoryFilter.showdowns:
         return hands.where((h) => h.wasShowdown).toList();
     }
+  }
+
+  void _exportHands(List<HandModel> hands) {
+    final buf = StringBuffer();
+    buf.writeln('Hand #,Winner,Pot (€),Hand Rank,Community Cards,Timestamp');
+    for (final h in hands) {
+      final board = h.communityCards.map((c) => c.display).join(' ');
+      buf.writeln('${h.handNumber},${h.winnerUsername},${h.potAmount.toStringAsFixed(2)},${h.handRank},$board,${h.timestamp.toIso8601String()}');
+    }
+    Share.share(buf.toString(), subject: 'Poker Hand History');
   }
 
   List<HandModel> _filterHands(List<HandModel> hands) {
@@ -92,8 +104,14 @@ class _GameHistoryScreenState extends ConsumerState<GameHistoryScreen> {
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.tune, color: AppColors.onSurfaceVariant),
-                    onPressed: () {},
+                    icon: const Icon(Icons.ios_share, color: AppColors.onSurfaceVariant),
+                    tooltip: 'Export hand history',
+                    onPressed: () {
+                      final handsValue = ref.read(activeGameHandsProvider).valueOrNull;
+                      if (handsValue != null && handsValue.isNotEmpty) {
+                        _exportHands(handsValue);
+                      }
+                    },
                   ),
                 ],
               ),
@@ -583,6 +601,18 @@ class _ExpandedSection extends StatelessWidget {
 
   const _ExpandedSection({required this.hand, required this.myUid});
 
+  String _buildShareText() {
+    final buf = StringBuffer();
+    buf.writeln('Hand #${hand.handNumber} · ${hand.winnerUsername} won €${hand.potAmount.toStringAsFixed(2)} with ${hand.handRank}');
+    if (hand.communityCards.isNotEmpty) {
+      buf.writeln('Board: ${hand.communityCards.map((c) => c.display).join(' ')}');
+    }
+    if (hand.actions.isNotEmpty) {
+      buf.writeln('Actions: ${hand.actions.map((a) => '${a.playerName} ${a.actionType.name}${a.amount != null ? ' €${a.amount!.toStringAsFixed(2)}' : ''}').join(', ')}');
+    }
+    return buf.toString().trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -623,6 +653,25 @@ class _ExpandedSection extends StatelessWidget {
 
               // Win condition banner
               _WinConditionBanner(hand: hand),
+
+              // Share button
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => Share.share(_buildShareText()),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.share, size: 14, color: AppColors.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Text('Share hand',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onSurfaceVariant,
+                        )),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

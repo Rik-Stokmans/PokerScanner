@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/game_model.dart';
 import '../models/hand_model.dart';
+import '../models/hand_action_model.dart';
 import '../models/card_model.dart';
 import '../models/deck_model.dart';
 import '../models/invitation_model.dart';
@@ -148,6 +149,32 @@ class FirestoreService {
           : game.playerIds.first;
     }
 
+    // Determine SB/BB positions from the new dealer index
+    final blindActions = <Map<String, dynamic>>[];
+    if (game.playerIds.length >= 2 && newDealerPlayerId != null) {
+      final dealerIdx = game.playerIds.indexOf(newDealerPlayerId);
+      final n = game.playerIds.length;
+      final sbUid = game.playerIds[(dealerIdx + 1) % n];
+      final bbUid = game.playerIds[(dealerIdx + 2) % n];
+      final now = DateTime.now();
+      blindActions.add(HandActionModel(
+        playerId: sbUid,
+        playerName: game.playerNames[sbUid] ?? sbUid,
+        actionType: ActionType.smallBlind,
+        amount: game.smallBlind,
+        bettingRound: BettingRound.preflop,
+        timestamp: now,
+      ).toMap());
+      blindActions.add(HandActionModel(
+        playerId: bbUid,
+        playerName: game.playerNames[bbUid] ?? bbUid,
+        actionType: ActionType.bigBlind,
+        amount: game.bigBlind,
+        bettingRound: BettingRound.preflop,
+        timestamp: now.add(const Duration(milliseconds: 1)),
+      ).toMap());
+    }
+
     await _db.collection('games').doc(gameId).update({
       'playerHands': hands.map(
         (uid, cards) => MapEntry(uid, cards.map((c) => c.toMap()).toList()),
@@ -162,12 +189,32 @@ class FirestoreService {
       'handCount': game.handCount + 1,
       'stacksAtHandStart': game.playerStacks,
       'handOver': false,
+      'currentHandActions': blindActions,
       if (newDealerPlayerId != null) 'dealerPlayerId': newDealerPlayerId,
     });
   }
 
-  static Future<void> playerCheck(String gameId, GameModel game, String uid) =>
-      _advanceTurn(gameId, game, uid);
+  static Future<void> _appendAction(
+      String gameId, HandActionModel action) async {
+    await _db.collection('games').doc(gameId).update({
+      'currentHandActions': FieldValue.arrayUnion([action.toMap()]),
+    });
+  }
+
+  static Future<void> playerCheck(
+      String gameId, GameModel game, String uid) async {
+    await _appendAction(
+      gameId,
+      HandActionModel(
+        playerId: uid,
+        playerName: game.playerNames[uid] ?? uid,
+        actionType: ActionType.check,
+        bettingRound: game.currentRound,
+        timestamp: DateTime.now(),
+      ),
+    );
+    await _advanceTurn(gameId, game, uid);
+  }
 
   static Future<void> playerCall(
       String gameId, GameModel game, String uid) async {
@@ -176,11 +223,37 @@ class FirestoreService {
     final myBet = game.playerBets[uid] ?? 0;
     final callAmount = highBet - myBet;
     if (callAmount <= 0) return playerCheck(gameId, game, uid);
-    return playerBet(gameId, game, uid, callAmount);
+
+    final newStacks = Map<String, double>.from(game.playerStacks);
+    newStacks[uid] = (newStacks[uid] ?? 0) - callAmount;
+    final isAllIn = (newStacks[uid] ?? 0) <= 0;
+    await _appendAction(
+      gameId,
+      HandActionModel(
+        playerId: uid,
+        playerName: game.playerNames[uid] ?? uid,
+        actionType: isAllIn ? ActionType.allIn : ActionType.call,
+        amount: callAmount,
+        bettingRound: game.currentRound,
+        timestamp: DateTime.now(),
+      ),
+    );
+    return playerBet(gameId, game, uid, callAmount, skipActionLog: true);
   }
 
   static Future<void> playerFold(
       String gameId, GameModel game, String uid) async {
+    await _appendAction(
+      gameId,
+      HandActionModel(
+        playerId: uid,
+        playerName: game.playerNames[uid] ?? uid,
+        actionType: ActionType.fold,
+        bettingRound: game.currentRound,
+        timestamp: DateTime.now(),
+      ),
+    );
+
     final newFolded = [...game.foldedPlayers, uid];
     final activePlayers =
         game.playerIds.where((id) => !newFolded.contains(id)).toList();
@@ -199,7 +272,8 @@ class FirestoreService {
   }
 
   static Future<void> playerBet(
-      String gameId, GameModel game, String uid, double amount) async {
+      String gameId, GameModel game, String uid, double amount,
+      {bool skipActionLog = false}) async {
     final highBet =
         game.playerBets.values.fold<double>(0, (a, b) => a > b ? a : b);
     final myBet = game.playerBets[uid] ?? 0;
@@ -214,6 +288,23 @@ class FirestoreService {
 
     final newStacks = Map<String, double>.from(game.playerStacks);
     newStacks[uid] = (newStacks[uid] ?? 0) - amount;
+
+    if (!skipActionLog) {
+      final isAllIn = (newStacks[uid] ?? 0) <= 0;
+      final isRaise = total > highBet;
+      await _appendAction(
+        gameId,
+        HandActionModel(
+          playerId: uid,
+          playerName: game.playerNames[uid] ?? uid,
+          actionType:
+              isAllIn ? ActionType.allIn : (isRaise ? ActionType.raise : ActionType.call),
+          amount: amount,
+          bettingRound: game.currentRound,
+          timestamp: DateTime.now(),
+        ),
+      );
+    }
 
     await _db.collection('games').doc(gameId).update({
       'pot': newPot,
@@ -359,6 +450,13 @@ class FirestoreService {
       'handOver': true,
     });
 
+    // Read and clear the running action log
+    final gameSnap = await _db.collection('games').doc(gameId).get();
+    final rawActions =
+        (gameSnap.data()?['currentHandActions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final actions = rawActions.map(HandActionModel.fromMap).toList();
+    await _db.collection('games').doc(gameId).update({'currentHandActions': []});
+
     // Save hand to history
     final hand = HandModel(
       id: '',
@@ -378,6 +476,7 @@ class FirestoreService {
         ...game.shownHandPlayerIds,
       }.toList(),
       playerStacksBefore: game.stacksAtHandStart,
+      actions: actions,
     );
     final handRef = await _db
         .collection('games')
