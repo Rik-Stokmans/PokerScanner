@@ -120,6 +120,7 @@ class FirestoreService {
       'currentTurnPlayerId': game.playerIds.first,
       'handCount': game.handCount + 1,
       'stacksAtHandStart': game.playerStacks,
+      'playersToAct': game.playerIds,
     });
   }
 
@@ -190,6 +191,7 @@ class FirestoreService {
       'stacksAtHandStart': game.playerStacks,
       'handOver': false,
       'currentHandActions': blindActions,
+      'playersToAct': game.playerIds,
       if (newDealerPlayerId != null) 'dealerPlayerId': newDealerPlayerId,
     });
   }
@@ -221,12 +223,13 @@ class FirestoreService {
     final highBet =
         game.playerBets.values.fold<double>(0, (a, b) => a > b ? a : b);
     final myBet = game.playerBets[uid] ?? 0;
-    final callAmount = highBet - myBet;
+    final myStack = game.playerStacks[uid] ?? 0;
+    // Clamp to the player's remaining stack to avoid going negative (all-in call)
+    final callAmount = (highBet - myBet).clamp(0.0, myStack);
     if (callAmount <= 0) return playerCheck(gameId, game, uid);
 
-    final newStacks = Map<String, double>.from(game.playerStacks);
-    newStacks[uid] = (newStacks[uid] ?? 0) - callAmount;
-    final isAllIn = (newStacks[uid] ?? 0) <= 0;
+    final newStack = myStack - callAmount;
+    final isAllIn = newStack <= 0;
     await _appendAction(
       gameId,
       HandActionModel(
@@ -265,10 +268,25 @@ class FirestoreService {
       return;
     }
 
+    // Remove folder from playersToAct
+    final newPlayersToAct =
+        game.playersToAct.where((id) => id != uid).toList();
+
+    if (newPlayersToAct.isEmpty) {
+      await _db
+          .collection('games')
+          .doc(gameId)
+          .update({'foldedPlayers': newFolded});
+      await _advanceRound(
+          gameId, game.copyWith(foldedPlayers: newFolded));
+      return;
+    }
+
     await _db.collection('games').doc(gameId).update({
       'foldedPlayers': newFolded,
+      'currentTurnPlayerId': newPlayersToAct.first,
+      'playersToAct': newPlayersToAct,
     });
-    await _advanceTurn(gameId, game.copyWith(foldedPlayers: newFolded), uid);
   }
 
   static Future<void> playerBet(
@@ -289,9 +307,10 @@ class FirestoreService {
     final newStacks = Map<String, double>.from(game.playerStacks);
     newStacks[uid] = (newStacks[uid] ?? 0) - amount;
 
+    final isAllIn = (newStacks[uid] ?? 0) <= 0;
+    final isRaise = total > highBet;
+
     if (!skipActionLog) {
-      final isAllIn = (newStacks[uid] ?? 0) <= 0;
-      final isRaise = total > highBet;
       await _appendAction(
         gameId,
         HandActionModel(
@@ -311,8 +330,34 @@ class FirestoreService {
       'playerBets': newBets,
       'playerStacks': newStacks,
     });
-    await _advanceTurn(
-        gameId, game.copyWith(pot: newPot, playerBets: newBets), uid);
+
+    if (isRaise) {
+      // After a raise every other active player must act again.
+      // Build playersToAct starting from the player after the raiser.
+      final active = game.playerIds
+          .where((id) => !game.foldedPlayers.contains(id))
+          .toList();
+      final raiserIdx = active.indexOf(uid);
+      final newPlayersToAct = [
+        for (int i = 1; i < active.length; i++)
+          active[(raiserIdx + i) % active.length]
+      ];
+
+      if (newPlayersToAct.isEmpty) {
+        await _advanceRound(
+            gameId, game.copyWith(pot: newPot, playerBets: newBets));
+        return;
+      }
+
+      await _db.collection('games').doc(gameId).update({
+        'currentTurnPlayerId': newPlayersToAct.first,
+        'playersToAct': newPlayersToAct,
+      });
+    } else {
+      // Call — remove player from playersToAct via _advanceTurn
+      await _advanceTurn(
+          gameId, game.copyWith(pot: newPot, playerBets: newBets), uid);
+    }
   }
 
   static Future<void> updatePlayerStack(
@@ -329,40 +374,20 @@ class FirestoreService {
 
   static Future<void> _advanceTurn(
       String gameId, GameModel game, String currentUid) async {
-    final active =
-        game.playerIds.where((id) => !game.foldedPlayers.contains(id)).toList();
-    if (active.isEmpty) return;
+    // Remove the acting player from the queue
+    final newPlayersToAct =
+        game.playersToAct.where((id) => id != currentUid).toList();
 
-    final idx = active.indexOf(currentUid);
-
-    if (idx == -1) {
-      // currentUid just folded — find next active player by position in full list
-      final allIds = game.playerIds;
-      final posInAll = allIds.indexOf(currentUid);
-      for (int offset = 1; offset <= allIds.length; offset++) {
-        final candidate = allIds[(posInAll + offset) % allIds.length];
-        if (active.contains(candidate)) {
-          await _db.collection('games').doc(gameId)
-              .update({'currentTurnPlayerId': candidate});
-          return;
-        }
-      }
-      return;
-    }
-
-    final nextIdx = (idx + 1) % active.length;
-    final nextPlayer = active[nextIdx];
-
-    // If we've gone around all active players, advance the round
-    if (nextIdx == 0) {
+    if (newPlayersToAct.isEmpty) {
+      // Everyone has acted — move to the next betting round
       await _advanceRound(gameId, game);
       return;
     }
 
-    await _db
-        .collection('games')
-        .doc(gameId)
-        .update({'currentTurnPlayerId': nextPlayer});
+    await _db.collection('games').doc(gameId).update({
+      'currentTurnPlayerId': newPlayersToAct.first,
+      'playersToAct': newPlayersToAct,
+    });
   }
 
   static Future<void> _advanceRound(
@@ -403,6 +428,7 @@ class FirestoreService {
       'currentRound': nextRound.name,
       'playerBets': {for (final uid in game.playerIds) uid: 0.0},
       'currentTurnPlayerId': active.first,
+      'playersToAct': active, // everyone acts fresh each new round
     });
   }
 
@@ -939,6 +965,7 @@ extension GameModelCopyWith on GameModel {
     BettingRound? currentRound,
     List<CardModel>? communityCards,
     String? currentTurnPlayerId,
+    List<String>? playersToAct,
   }) =>
       GameModel(
         id: id,
@@ -961,5 +988,6 @@ extension GameModelCopyWith on GameModel {
         shownHandPlayerIds: shownHandPlayerIds,
         handCount: handCount,
         createdAt: createdAt,
+        playersToAct: playersToAct ?? this.playersToAct,
       );
 }

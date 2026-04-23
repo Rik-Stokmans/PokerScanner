@@ -1,6 +1,7 @@
 ---
 description: Resolve all unchecked todos in TODOS.md via parallel sub-agents (one agent per cluster of related todos), then commit each group's changes to the relevant repo(s)
 allowed-tools: Read, Write, Edit, Bash, Agent
+model: opus
 ---
 
 ## Context
@@ -57,6 +58,7 @@ g3 [t4, t5]   → RFID power-down + battery reporting (poker-device)
 Send **one message containing all the Agent tool calls** so they run concurrently. For each group, call the `Agent` tool with:
 
 - `subagent_type`: `general-purpose`
+- `model`: `sonnet`
 - `description`: `Resolve group <group-id>`
 - `prompt`: the brief below, with `{{GROUP_ID}}`, `{{TODO_COUNT}}`, and `{{TODOS_BLOCK}}` substituted.
 
@@ -185,8 +187,39 @@ Procedure:
 7. Do NOT push. Do NOT edit TODOS.md. Do NOT remove worktrees. The
    coordinator handles all of that.
 
-Your final message back to the coordinator: ≤ 3 lines. State the result
-file path and a one-line outcome.
+Your final message back to the coordinator must be **detailed** so the
+orchestrator can fully understand what was done and combine results
+correctly. Include all of the following sections:
+
+**Result file:** `/tmp/todo-{{GROUP_ID}}-result.json`
+
+**Outcome:** `success | partial | failed` — one sentence explaining why.
+
+**Todos resolved:** list each resolved todo id and a one-sentence
+description of the specific change made to address it.
+
+**Todos skipped / failed:** list each with a clear explanation of why it
+could not be resolved (out of scope, build error, ambiguous spec, etc.).
+
+**Files changed (per repo):** for each repo touched, list every file path
+that was created, modified, or deleted, and briefly describe the change
+made to that file (e.g. `lib/screens/hand_history.dart — added sort
+button and wired SortOrder enum`).
+
+**Commit details (per repo):**
+- Worktree path
+- Branch name
+- Commit SHA (full)
+- Commit message
+
+**Build / verification result:** state whether `flutter analyze` passed,
+was skipped, or failed, and why. For device firmware, state whether
+arduino-cli compiled cleanly, static-check only, or was skipped.
+
+**Anything the orchestrator should know:** flag any ambiguity you
+resolved, any assumption you made, any side-effect the coordinator should
+be aware of when cherry-picking (e.g. new dependencies added to
+pubspec.yaml, new files the cherry-pick will introduce).
 ```
 
 ---
@@ -194,6 +227,8 @@ file path and a one-line outcome.
 ### 5. Collect results
 
 After all agents return, read every `/tmp/todo-<group-id>-result.json` file. If a result file is missing for some group, treat every todo in that group as `failed` with reason `"agent did not produce a result file"`.
+
+Each sub-agent also returns a detailed message. Cross-reference the agent's message with the JSON file — the message contains richer context (assumptions made, new dependencies, side-effects) that the JSON does not capture. Use that context to make better-informed decisions during cherry-pick and to write accurate TODOS.md notes.
 
 ### 6. Coordinator phase — cherry-pick into master (serial, one repo at a time)
 

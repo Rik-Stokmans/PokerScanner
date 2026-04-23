@@ -33,6 +33,9 @@ class GameModel {
   final Map<String, String> seatAssignments;
   /// Which player currently holds the dealer button (visual only, does not affect betting order).
   final String? dealerPlayerId;
+  /// Ordered list of players who still need to act in the current betting round.
+  /// After a raise, all non-raisers are added back. Round ends when this is empty.
+  final List<String> playersToAct;
 
   const GameModel({
     required this.id,
@@ -60,6 +63,7 @@ class GameModel {
     this.handOver = false,
     this.seatAssignments = const {},
     this.dealerPlayerId,
+    this.playersToAct = const [],
   });
 
   int get playerCount => playerIds.length;
@@ -101,6 +105,7 @@ class GameModel {
         'handOver': handOver,
         'seatAssignments': seatAssignments,
         if (dealerPlayerId != null) 'dealerPlayerId': dealerPlayerId,
+        'playersToAct': playersToAct,
       };
 
   factory GameModel.fromMap(String id, Map<String, dynamic> map) {
@@ -144,6 +149,7 @@ class GameModel {
               ?.map((k, v) => MapEntry(k, v as String)) ??
           const {},
       dealerPlayerId: map['dealerPlayerId'] as String?,
+      playersToAct: List<String>.from(map['playersToAct'] ?? []),
     );
   }
 }

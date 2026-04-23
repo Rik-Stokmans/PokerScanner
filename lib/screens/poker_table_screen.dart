@@ -853,8 +853,10 @@ class _ActionBar extends StatelessWidget {
               label: isFacingBet
                   ? 'CALL\n€${callAmount.toStringAsFixed(2)}'
                   : 'CHECK',
-              color: AppColors.surfaceContainerHigh,
-              textColor: AppColors.onSurface,
+              color: isFacingBet
+                  ? const Color(0xFF2E7D32)
+                  : AppColors.surfaceContainerHigh,
+              textColor: isFacingBet ? Colors.white : AppColors.onSurface,
               onTap: () => isFacingBet
                   ? FirestoreService.playerCall(game.id, game, userId)
                   : FirestoreService.playerCheck(game.id, game, userId),
