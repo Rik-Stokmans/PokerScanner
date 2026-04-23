@@ -234,23 +234,26 @@ class _PokerTableScreenState extends ConsumerState<PokerTableScreen> {
                                 size: 18, color: AppColors.onSurfaceVariant),
                           ),
                         ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.people_outline,
-                                size: 16, color: AppColors.onSurfaceVariant),
-                            const SizedBox(width: 6),
-                            Text('${game.playerCount}/${game.maxPlayers}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13, fontWeight: FontWeight.w600,
-                                  color: AppColors.onSurfaceVariant,
-                                )),
-                          ],
+                      GestureDetector(
+                        onTap: () => context.push('/invite-friends'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.people_outline,
+                                  size: 16, color: AppColors.onSurfaceVariant),
+                              const SizedBox(width: 6),
+                              Text('${game.playerCount}/${game.maxPlayers}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13, fontWeight: FontWeight.w600,
+                                    color: AppColors.onSurfaceVariant,
+                                  )),
+                            ],
+                          ),
                         ),
                       ),
                     ],
