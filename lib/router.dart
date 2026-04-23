@@ -11,6 +11,7 @@ import 'screens/invitations_screen.dart';
 import 'screens/game_history_screen.dart';
 import 'screens/session_analysis_screen.dart';
 import 'screens/friends_screen.dart';
+import 'screens/invite_friends_screen.dart';
 import 'screens/learn_screen.dart';
 import 'screens/deck_management_screen.dart';
 import 'screens/deck_registration_screen.dart';
@@ -82,6 +83,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/friends',
         builder: (context, state) => const FriendsScreen(),
+      ),
+      GoRoute(
+        path: '/invite-friends',
+        builder: (context, state) => const InviteFriendsScreen(),
       ),
       GoRoute(
         path: '/decks',

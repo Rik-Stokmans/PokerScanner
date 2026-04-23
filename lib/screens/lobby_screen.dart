@@ -181,7 +181,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               const SizedBox(height: 12),
               if (hasActiveGame)
                 GestureDetector(
-                  onTap: () => _showInviteDialog(context, game.id),
+                  onTap: () => context.push('/invite-friends'),
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -332,57 +332,6 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     );
   }
 
-  void _showInviteDialog(BuildContext context, String gameId) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        title: Text('Invite Player',
-            style: GoogleFonts.manrope(
-                color: AppColors.onSurface, fontWeight: FontWeight.w700)),
-        content: TextField(
-          controller: controller,
-          style: GoogleFonts.inter(color: AppColors.onSurface),
-          decoration: const InputDecoration(
-            labelText: 'Player username',
-            prefixIcon: Icon(Icons.person_search, color: AppColors.onSurfaceVariant),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final users = await FirestoreService.searchUsers(controller.text.trim());
-              if (users.isEmpty || !mounted) return;
-              final user = ref.read(currentUserProvider).value;
-              final game = ref.read(activeGameProvider).value;
-              if (user == null || game == null) return;
-              await FirestoreService.sendInvitation(
-                fromUserId: user.id,
-                fromUsername: user.username,
-                toUserId: users.first.id,
-                gameId: game.id,
-                gameName: game.name,
-                smallBlind: game.smallBlind,
-                bigBlind: game.bigBlind,
-              );
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invitation sent!')),
-                );
-              }
-            },
-            child: Text('Send', style: GoogleFonts.inter(color: AppColors.primary)),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatItem extends StatelessWidget {
