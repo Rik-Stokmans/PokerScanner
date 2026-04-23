@@ -14,6 +14,7 @@ import 'screens/friends_screen.dart';
 import 'screens/invite_friends_screen.dart';
 import 'screens/learn_screen.dart';
 import 'screens/learn/range_trainer_screen.dart';
+import 'screens/learn/hand_review_screen.dart';
 import 'screens/deck_management_screen.dart';
 import 'screens/deck_registration_screen.dart';
 import 'screens/range_trainer_screen.dart';
@@ -82,6 +83,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const RangeTrainerScreen(),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/hand-review',
+        builder: (context, state) => const HandReviewScreen(),
       ),
       GoRoute(
         path: '/scanner-setup',

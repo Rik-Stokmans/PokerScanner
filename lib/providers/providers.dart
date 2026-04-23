@@ -64,6 +64,14 @@ final userRecentHandsProvider = FutureProvider<List<HandModel>>((ref) async {
   return FirestoreService.getUserRecentHands(user.id);
 });
 
+/// Loads the user's 50 most recent hands for the hand-review quiz feature.
+final userRecentHandsForReviewProvider =
+    FutureProvider<List<HandModel>>((ref) async {
+  final user = ref.watch(currentUserProvider).value;
+  if (user == null) return [];
+  return FirestoreService.getUserRecentHands(user.id, limit: 50);
+});
+
 // ─── Session Analysis ─────────────────────────────────────────────────────
 
 class SessionStats {
