@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/hand_model.dart';
 import '../theme/app_colors.dart';
@@ -202,6 +203,9 @@ class SessionAnalysisScreen extends ConsumerWidget {
               GradientButton(
                 label: 'START TRAINING DRILL',
                 icon: Icons.sports_score,
+                // Navigate to the Learn screen which hosts training drills.
+                // A dedicated training/quiz screen can be added later at /training.
+                onPressed: () => context.go('/learn'),
               ),
             ],
           ),
